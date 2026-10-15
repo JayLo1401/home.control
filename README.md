@@ -27,7 +27,13 @@ Mit den Pfeiltasten wählst du, mit OK schaltest du, mit Zurück oder der Panel-
 3. Öffne die App, wähle **Taste anlernen** und drücke z. B. die Menütaste.
 4. Trage URL und Token ein (oder nutze die Browser-Einrichtung) und wähle die Entitäten aus.
 
-## Bauen
+## Bauen & Installieren
+
+```
+./scripts/deploy.ps1                                   # Debug bauen, Geräte auswählen, installieren
+./scripts/deploy.ps1 -Release -EnableService -Launch   # Release + Dienst per adb einschalten + App starten
+./scripts/deploy.ps1 -Release -SkipBuild -All          # letzte APK auf alle Geräte
+```
 
 ```
 flutter build apk --release --split-per-abi   # kleinere APKs (armeabi-v7a reicht für Xiaomi-Boxen)
