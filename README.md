@@ -70,8 +70,8 @@ Die Nachrichten kommen **lokal** über die bestehende Verbindung zu Home Assista
 
 ## Installation
 
-1. APK installieren, z. B. mit dem Deploy-Skript (siehe [Entwicklung](#entwicklung)) oder per
-   `adb install -r app-release.apk`.
+1. APK aus den [Releases](https://github.com/JayLo1401/home.control/releases) laden und installieren, z. B. per
+   `adb install -r home_control-1.0.0.apk` (oder mit dem Deploy-Skript, siehe [Entwicklung](#entwicklung)).
 2. **Hintergrunddienst einschalten**: Einstellungen → Geräteeinstellungen → Bedienungshilfen → **Home Control Panel**.
    Fehlt der Eintrag, geht es auch per adb:
 
@@ -222,6 +222,21 @@ lib/
 assets/mdi/                     Material Design Icons (Font + Namensliste)
 scripts/                        Deploy, Icons, Gong
 test/
+```
+
+## Versionen
+
+Die Versionsnummer steht in [`pubspec.yaml`](pubspec.yaml) (`version: 1.0.0+2` = Version + Build-Nummer) und wird in
+der App unten in der Statusleiste angezeigt. Änderungen je Version: [CHANGELOG.md](CHANGELOG.md). Fertige APKs gibt es
+unter [Releases](https://github.com/JayLo1401/home.control/releases).
+
+Neue Version veröffentlichen: Version und Build-Nummer in `pubspec.yaml` erhöhen, Abschnitt im `CHANGELOG.md` ergänzen,
+committen, dann APKs bauen und das Release anlegen:
+
+```sh
+flutter build apk --release --no-tree-shake-icons
+git tag v1.1.0 && git push origin main v1.1.0
+gh release create v1.1.0 --title "v1.1.0" --notes-file <(sed -n '/^## \[1.1.0\]/,/^## \[/p' CHANGELOG.md | sed '1d;$d') build/app/outputs/flutter-apk/*.apk
 ```
 
 ## Lizenz

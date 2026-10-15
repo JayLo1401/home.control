@@ -40,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _lifecycle = AppLifecycleListener(onResume: _refreshService);
     _load(reconnect: true);
     _refreshService();
+    _loadVersion();
   }
 
   @override
@@ -107,6 +108,14 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     if (reconnect) _ha.configure(c.haUrl, c.token, allowBadCertificates: c.allowBadCertificates);
     _migrateGroupSensors();
+  }
+
+  /// Versionsnummer aus der APK (versionName = pubspec.yaml "version").
+  String _version = '';
+
+  Future<void> _loadVersion() async {
+    final v = (await NativeBridge.deviceInfo())['appVersion'] ?? '';
+    if (mounted) setState(() => _version = v);
   }
 
   Future<void> _refreshService() async {
@@ -264,6 +273,11 @@ class _SettingsPageState extends State<SettingsPage> {
           item(_ha.status == HaStatus.connected, Icons.hub, haText),
           item(d.isRegistered, Icons.notifications_active,
               d.isRegistered ? 'Türglocke angemeldet' : 'Türglocke nicht angemeldet'),
+          if (_version.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text('v$_version', style: const TextStyle(fontSize: 13, color: Colors.white38)),
+            ),
         ]),
       ),
     );
