@@ -1,6 +1,10 @@
 package org.lotzapp.home_control
 
 import android.content.Intent
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -59,8 +63,88 @@ class MainActivity : FlutterActivity() {
                         result.success(service != null)
                     }
 
+                    "discoverHomeAssistant" -> {
+                        val timeout = call.argument<Int>("timeoutMs") ?: 4000
+                        discoverHomeAssistant(timeout.toLong(), result)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Sucht Home-Assistant-Instanzen per mDNS (`_home-assistant._tcp`).
+     * Gefundene Dienste werden nacheinander aufgeloest (aeltere Android-Versionen
+     * koennen nur einen Resolve gleichzeitig).
+     */
+    @Suppress("DEPRECATION")
+    private fun discoverHomeAssistant(timeoutMs: Long, result: MethodChannel.Result) {
+        val nsd = getSystemService(NSD_SERVICE) as NsdManager
+        val main = Handler(Looper.getMainLooper())
+        val found = mutableListOf<Map<String, Any?>>()
+        val queue = ArrayDeque<NsdServiceInfo>()
+        var resolving = false
+        var finished = false
+
+        fun resolveNext() {
+            if (resolving || finished) return
+            val service = queue.removeFirstOrNull() ?: return
+            resolving = true
+            nsd.resolveService(service, object : NsdManager.ResolveListener {
+                override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
+                    main.post { resolving = false; resolveNext() }
+                }
+
+                override fun onServiceResolved(info: NsdServiceInfo) {
+                    val attrs = info.attributes.mapValues { (_, v) -> v?.toString(Charsets.UTF_8) }
+                    main.post {
+                        found.add(
+                            mapOf(
+                                "name" to (attrs["location_name"] ?: info.serviceName),
+                                "host" to info.host?.hostAddress,
+                                "port" to info.port,
+                                "internalUrl" to attrs["internal_url"],
+                                "baseUrl" to attrs["base_url"],
+                                "version" to attrs["version"],
+                            )
+                        )
+                        resolving = false
+                        resolveNext()
+                    }
+                }
+            })
+        }
+
+        val listener = object : NsdManager.DiscoveryListener {
+            override fun onServiceFound(info: NsdServiceInfo) {
+                main.post { queue.add(info); resolveNext() }
+            }
+
+            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                main.post {
+                    if (!finished) {
+                        finished = true
+                        result.success(found.toList())
+                    }
+                }
+            }
+
+            override fun onDiscoveryStarted(serviceType: String) {}
+            override fun onDiscoveryStopped(serviceType: String) {}
+            override fun onServiceLost(info: NsdServiceInfo) {}
+            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
+        }
+
+        nsd.discoverServices("_home-assistant._tcp", NsdManager.PROTOCOL_DNS_SD, listener)
+        main.postDelayed({
+            if (finished) return@postDelayed
+            finished = true
+            try {
+                nsd.stopServiceDiscovery(listener)
+            } catch (_: Exception) {
+            }
+            result.success(found.toList())
+        }, timeoutMs)
     }
 }

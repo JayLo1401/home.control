@@ -32,4 +32,10 @@ class NativeBridge {
   static Future<void> cancelLearn() => _ch.invokeMethod('cancelLearn');
 
   static Future<bool> showOverlay() async => await _ch.invokeMethod<bool>('showOverlay') ?? false;
+
+  /// mDNS-Suche nach `_home-assistant._tcp` (Android NsdManager).
+  static Future<List<Map<dynamic, dynamic>>> discoverHomeAssistant({int timeoutMs = 4000}) async {
+    final list = await _ch.invokeMethod<List>('discoverHomeAssistant', {'timeoutMs': timeoutMs});
+    return [...?list?.cast<Map<dynamic, dynamic>>()];
+  }
 }

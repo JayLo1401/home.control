@@ -7,6 +7,7 @@ import '../core/config.dart';
 import '../core/native_bridge.dart';
 import '../core/theme.dart';
 import '../ha/ha_client.dart';
+import '../ha/ha_discovery.dart';
 import '../ha/ha_entity.dart';
 import '../panel/quick_panel.dart';
 import 'entity_picker_page.dart';
@@ -130,6 +131,19 @@ class _SettingsPageState extends State<SettingsPage> {
     } on PlatformException catch (e) {
       if (mounted) Navigator.of(context).pop();
       _snack(e.message ?? 'Fehler');
+    }
+  }
+
+  // ---------------------------------------------------------------- HA im Netz suchen
+
+  Future<void> _searchHa() async {
+    final url = await showDialog<String>(context: context, builder: (_) => const _DiscoveryDialog());
+    if (url == null || !mounted) return;
+    setState(() => _urlCtrl.text = url);
+    _config.haUrl = url;
+    await _save();
+    if (mounted && _config.token.isEmpty) {
+      _snack('URL übernommen. Jetzt noch den Token eintragen (z. B. per Browser-Einrichtung).');
     }
   }
 
@@ -292,11 +306,17 @@ class _SettingsPageState extends State<SettingsPage> {
     return _section('Home Assistant', Icons.hub, [
       _statusChip(ok, text, text),
       const SizedBox(height: 12),
-      TextField(
-        controller: _urlCtrl,
-        keyboardType: TextInputType.url,
-        decoration: const InputDecoration(labelText: 'URL', hintText: 'http://192.168.1.10:8123'),
-      ),
+      Row(children: [
+        Expanded(
+          child: TextField(
+            controller: _urlCtrl,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(labelText: 'URL', hintText: 'http://192.168.1.10:8123'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(onPressed: _searchHa, icon: const Icon(Icons.wifi_find), label: const Text('Suchen')),
+      ]),
       const SizedBox(height: 12),
       TextField(
         controller: _tokenCtrl,
@@ -401,6 +421,64 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ]),
       );
+}
+
+/// Sucht Home Assistant im Netz und laesst eine gefundene Instanz auswaehlen.
+class _DiscoveryDialog extends StatefulWidget {
+  const _DiscoveryDialog();
+
+  @override
+  State<_DiscoveryDialog> createState() => _DiscoveryDialogState();
+}
+
+class _DiscoveryDialogState extends State<_DiscoveryDialog> {
+  late Future<List<HaInstance>> _search = HaDiscovery.search();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      icon: const Icon(Icons.wifi_find, size: 40, color: brandGreen),
+      title: const Text('Home Assistant suchen'),
+      content: SizedBox(
+        width: 480,
+        child: FutureBuilder<List<HaInstance>>(
+          future: _search,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Column(mainAxisSize: MainAxisSize.min, children: [
+                SizedBox(height: 8),
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Durchsuche das Netzwerk…'),
+              ]);
+            }
+            final list = snap.data ?? [];
+            if (list.isEmpty) {
+              return const Text('Keine Home-Assistant-Instanz gefunden.\n'
+                  'Ist das Gerät im selben Netz? Sonst die URL von Hand eintragen.');
+            }
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final (i, ha) in list.indexed)
+                ListTile(
+                  autofocus: i == 0,
+                  leading: const Icon(Icons.home_rounded, color: brandGreen),
+                  title: Text(ha.name),
+                  subtitle: Text(ha.version == null ? ha.url : '${ha.url} · Version ${ha.version}'),
+                  onTap: () => Navigator.of(context).pop(ha.url),
+                ),
+            ]);
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => setState(() => _search = HaDiscovery.search()),
+          child: const Text('Erneut suchen'),
+        ),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
+      ],
+    );
+  }
 }
 
 /// Panel in der App – zum Testen auf Tablet (Touch) oder TV ohne Dienst.
