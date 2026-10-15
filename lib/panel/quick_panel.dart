@@ -254,7 +254,8 @@ class QuickPanelState extends State<QuickPanel> {
       children: [
         Icon(Icons.home_rounded, color: brandGreen, size: 20 * s),
         SizedBox(width: 8 * s),
-        Flexible(
+        // Expanded (nicht Flexible + Spacer): schiebt Status und Uhr ganz nach rechts.
+        Expanded(
           child: Text(
             widget.panel?.name ?? 'Home Control',
             maxLines: 1,
@@ -262,7 +263,6 @@ class QuickPanelState extends State<QuickPanel> {
             style: TextStyle(fontSize: 16 * s, fontWeight: FontWeight.w600, color: Colors.white70),
           ),
         ),
-        const Spacer(),
         Container(
           width: 8 * s,
           height: 8 * s,
