@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../core/config.dart';
 import '../core/theme.dart';
+import '../ha/entity_look.dart';
 import '../ha/ha_client.dart';
 import '../ha/ha_entity.dart';
 
@@ -83,16 +85,31 @@ class ReorderRow extends StatelessWidget {
       );
 }
 
-/// Zeile fuer eine einzelne Entitaet in einer sortierbaren Liste.
-ReorderRow entityRow(HaClient ha, List<String> list, int i, void Function(VoidCallback) change) {
+/// Untertitel einer Entitaet: ID, Zustand und – bei eigenem Namen – der HA-Name.
+String entitySubtitle(AppConfig config, String id, HaEntity? e) {
+  if (e == null) return '$id · nicht gefunden';
+  final custom = config.overrides[id]?.name;
+  return [id, stateLabel(e), if (custom != null) 'HA: ${e.name}'].join(' · ');
+}
+
+/// Zeile fuer eine einzelne Entitaet in einer sortierbaren Liste (✎ = Name/Symbol anpassen).
+ReorderRow entityRow(
+  HaClient ha,
+  AppConfig config,
+  List<String> list,
+  int i,
+  void Function(VoidCallback) change, {
+  required VoidCallback onEdit,
+}) {
   final id = list[i];
   final e = ha.states[id];
   return ReorderRow(
-    leading: Icon(e == null ? Icons.help_outline : iconFor(e)),
-    title: e?.name ?? id,
-    subtitle: e == null ? id : '$id · ${stateLabel(e)}',
+    leading: Icon(entityIcon(config, id, e)),
+    title: entityName(config, id, e),
+    subtitle: entitySubtitle(config, id, e),
     onUp: i > 0 ? () => change(() => list.insert(i - 1, list.removeAt(i))) : null,
     onDown: i < list.length - 1 ? () => change(() => list.insert(i + 1, list.removeAt(i))) : null,
+    onEdit: onEdit,
     onRemove: () => change(() => list.removeAt(i)),
   );
 }

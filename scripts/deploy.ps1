@@ -156,7 +156,8 @@ if (-not $SkipBuild) {
     Write-Host ("Baue {0}-APK..." -f $variant) -ForegroundColor Cyan
     Push-Location $repoRoot
     try {
-        & flutter build apk "--$variant"
+        # MDI-Symbole aus HA werden zur Laufzeit gewaehlt -> Icon-Tree-Shaking aus.
+        & flutter build apk "--$variant" --no-tree-shake-icons
         if ($LASTEXITCODE -ne 0) { throw "flutter build fehlgeschlagen (exit code $LASTEXITCODE)." }
     } finally {
         Pop-Location

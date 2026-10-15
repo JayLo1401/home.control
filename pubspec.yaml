@@ -19,3 +19,11 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Material Design Icons (@mdi/font 7.4.47) fuer HA-Symbole "mdi:..."
+  assets:
+    - assets/mdi/names.txt
+  fonts:
+    - family: MaterialDesignIcons
+      fonts:
+        - asset: assets/mdi/materialdesignicons.ttf

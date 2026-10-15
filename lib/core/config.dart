@@ -30,6 +30,23 @@ class GroupItem extends PanelItem {
   Map<String, dynamic> toJson() => {'group': name, 'entities': entities};
 }
 
+/// Eigener Name / eigenes Symbol einer Entitaet (gilt in allen Panels).
+class EntityOverride {
+  String? name;
+
+  /// z. B. "mdi:hot-tub"
+  String? icon;
+
+  EntityOverride({this.name, this.icon});
+
+  bool get isEmpty => (name == null || name!.isEmpty) && (icon == null || icon!.isEmpty);
+
+  Map<String, dynamic> toJson() => {'name': ?name, 'icon': ?icon};
+
+  factory EntityOverride.fromJson(Map<String, dynamic> j) =>
+      EntityOverride(name: j['name'] as String?, icon: j['icon'] as String?);
+}
+
 /// Aktion beim langen Druecken der Panel-Taste.
 class LongPressAction {
   String entityId;
@@ -99,6 +116,7 @@ class AppConfig {
   String token;
   bool allowBadCertificates;
   List<PanelConfig> panels;
+  Map<String, EntityOverride> overrides;
   int columns;
   int panelPercent;
   int autoCloseSeconds;
@@ -108,10 +126,25 @@ class AppConfig {
     this.token = '',
     this.allowBadCertificates = false,
     List<PanelConfig>? panels,
+    Map<String, EntityOverride>? overrides,
     this.columns = 4,
     this.panelPercent = 80,
     this.autoCloseSeconds = 30,
-  }) : panels = panels ?? [];
+  })  : panels = panels ?? [],
+        overrides = overrides ?? {};
+
+  /// Setzt Name/Symbol; leere Werte entfernen den Eintrag.
+  void setOverride(String entityId, {String? name, String? icon}) {
+    final o = EntityOverride(
+      name: (name?.trim().isEmpty ?? true) ? null : name!.trim(),
+      icon: (icon?.trim().isEmpty ?? true) ? null : icon!.trim(),
+    );
+    if (o.isEmpty) {
+      overrides.remove(entityId);
+    } else {
+      overrides[entityId] = o;
+    }
+  }
 
   bool get isConfigured => haUrl.isNotEmpty && token.isNotEmpty;
 
@@ -136,11 +169,18 @@ class AppConfig {
         panels = [PanelConfig('Panel 1', items: [for (final e in old) EntityItem(e)])];
       }
     }
+    final overridesJson = p.getString('overrides');
     return AppConfig(
       haUrl: p.getString('ha_url') ?? '',
       token: p.getString('ha_token') ?? '',
       allowBadCertificates: p.getBool('ha_insecure') ?? false,
       panels: panels,
+      overrides: overridesJson == null
+          ? null
+          : {
+              for (final MapEntry(:key, :value) in (jsonDecode(overridesJson) as Map).entries)
+                key as String: EntityOverride.fromJson((value as Map).cast<String, dynamic>()),
+            },
       columns: p.getInt('columns') ?? 4,
       panelPercent: p.getInt('panel_percent') ?? 80,
       autoCloseSeconds: p.getInt('auto_close') ?? 30,
@@ -154,6 +194,7 @@ class AppConfig {
     await p.setBool('ha_insecure', allowBadCertificates);
     await p.setString('panels', jsonEncode([for (final x in panels) x.toJson()]));
     await p.remove('entities');
+    await p.setString('overrides', jsonEncode({for (final e in overrides.entries) e.key: e.value.toJson()}));
     await p.setInt('columns', columns);
     await p.setInt('panel_percent', panelPercent);
     await p.setInt('auto_close', autoCloseSeconds);
@@ -170,19 +211,25 @@ class AppConfig {
   //   scene.kino
   //
   // "== Name" beginnt ein Panel, "-- Name" eine Gruppe, "--" allein beendet die Gruppe.
+  // Optional pro Entitaet: "switch.pumpe | Pumpe | mdi:pump" (eigener Name / Symbol).
   // Taste und Lang-Druecken-Aktion werden ueber den Panelnamen beibehalten.
 
   String panelsToText() {
     final b = StringBuffer();
+    void entity(String id) {
+      final o = overrides[id];
+      b.writeln(o == null ? id : [id, o.name ?? '', ?o.icon].join(' | '));
+    }
+
     for (final p in panels) {
       b.writeln('== ${p.name}');
       for (final i in p.items) {
         switch (i) {
           case EntityItem(:final entityId):
-            b.writeln(entityId);
+            entity(entityId);
           case GroupItem(:final name, :final entities):
             b.writeln('-- $name');
-            entities.forEach(b.writeln);
+            entities.forEach(entity);
             b.writeln('--');
         }
       }
@@ -215,7 +262,12 @@ class AppConfig {
           panel.items.add(group);
         }
       } else if (line.contains('.')) {
-        final id = line.split(RegExp(r'\s')).first;
+        final parts = line.split('|').map((s) => s.trim()).toList();
+        final id = parts.first.split(RegExp(r'\s')).first;
+        // Nur wenn "|" angegeben ist, werden Name/Symbol gesetzt (leer = entfernen).
+        if (parts.length > 1) {
+          setOverride(id, name: parts[1], icon: parts.length > 2 ? parts[2] : null);
+        }
         if (group != null) {
           group.entities.add(id);
         } else {

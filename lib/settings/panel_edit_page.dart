@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../core/config.dart';
 import '../core/native_bridge.dart';
 import '../core/theme.dart';
+import '../ha/entity_look.dart';
 import '../ha/ha_client.dart';
 import '../ha/ha_entity.dart';
 import '../panel/preview_page.dart';
+import 'entity_customize.dart';
 import 'entity_picker_page.dart';
 import 'key_learning.dart';
 import 'widgets.dart';
@@ -103,6 +105,10 @@ class _PanelEditPageState extends State<PanelEditPage> {
 
   // ---------------------------------------------------------------- Inhalt
 
+  Future<void> _customize(String id) async {
+    if (await showEntityCustomizeDialog(context, widget.config, _ha, id)) _change(() {});
+  }
+
   Future<void> _addEntities() async {
     if (!_requireConnection()) return;
     final current = [for (final i in _p.items) if (i is EntityItem) i.entityId];
@@ -129,7 +135,7 @@ class _PanelEditPageState extends State<PanelEditPage> {
 
   Future<void> _editGroup(GroupItem g) async {
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => GroupEditPage(ha: _ha, group: g, onChanged: widget.onChanged),
+      builder: (_) => GroupEditPage(ha: _ha, config: widget.config, group: g, onChanged: widget.onChanged),
     ));
     setState(() {});
   }
@@ -241,9 +247,9 @@ class _PanelEditPageState extends State<PanelEditPage> {
       ] else ...[
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(e == null ? Icons.help_outline : iconFor(e)),
-          title: Text(e?.name ?? lp.entityId),
-          subtitle: Text(e == null ? lp.entityId : '${lp.entityId} · ${stateLabel(e)}'),
+          leading: Icon(entityIcon(widget.config, lp.entityId, e)),
+          title: Text(entityName(widget.config, lp.entityId, e)),
+          subtitle: Text(entitySubtitle(widget.config, lp.entityId, e)),
           trailing: TextButton(onPressed: _pickLongPressEntity, child: const Text('Ändern')),
         ),
         const SizedBox(height: 8),
@@ -297,15 +303,16 @@ class _PanelEditPageState extends State<PanelEditPage> {
       case EntityItem(:final entityId):
         final e = _ha.states[entityId];
         return ReorderRow(
-          leading: Icon(e == null ? Icons.help_outline : iconFor(e)),
-          title: e?.name ?? entityId,
-          subtitle: e == null ? entityId : '$entityId · ${stateLabel(e)}',
+          leading: Icon(entityIcon(widget.config, entityId, e)),
+          title: entityName(widget.config, entityId, e),
+          subtitle: entitySubtitle(widget.config, entityId, e),
           onUp: up,
           onDown: down,
+          onEdit: () => _customize(entityId),
           onRemove: remove,
         );
       case GroupItem():
-        final names = [for (final id in item.entities) _ha.states[id]?.name ?? id];
+        final names = [for (final id in item.entities) entityName(widget.config, id, _ha.states[id])];
         return ReorderRow(
           leading: const Icon(Icons.workspaces, color: brandGreen),
           title: 'Gruppe: ${item.name}',
@@ -325,7 +332,15 @@ class GroupEditPage extends StatefulWidget {
   final GroupItem group;
   final Future<void> Function() onChanged;
 
-  const GroupEditPage({super.key, required this.ha, required this.group, required this.onChanged});
+  final AppConfig config;
+
+  const GroupEditPage({
+    super.key,
+    required this.ha,
+    required this.config,
+    required this.group,
+    required this.onChanged,
+  });
 
   @override
   State<GroupEditPage> createState() => _GroupEditPageState();
@@ -390,7 +405,10 @@ class _GroupEditPageState extends State<GroupEditPage> {
               ),
               const SizedBox(height: 8),
               if (list.isEmpty) const Text('Noch leer.', style: TextStyle(color: Colors.white54)),
-              for (var i = 0; i < list.length; i++) entityRow(widget.ha, list, i, _change),
+              for (var i = 0; i < list.length; i++)
+                entityRow(widget.ha, widget.config, list, i, _change, onEdit: () async {
+                  if (await showEntityCustomizeDialog(context, widget.config, widget.ha, list[i])) _change(() {});
+                }),
             ]),
           ]),
         ),

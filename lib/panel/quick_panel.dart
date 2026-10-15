@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../core/config.dart';
 import '../core/theme.dart';
+import '../ha/entity_look.dart';
 import '../ha/ha_client.dart';
 import '../ha/ha_entity.dart';
 
@@ -171,16 +172,17 @@ class QuickPanelState extends State<QuickPanel> {
   Future<void> _toggleEntity(String id) async {
     final e = widget.ha.states[id];
     if (e == null) return;
+    final name = entityName(widget.config, id, e);
     final action = primaryAction(e);
     if (action == null) {
-      _showMessage('${e.name}: ${stateLabel(e)}');
+      _showMessage('$name: ${stateLabel(e)}');
       return;
     }
     setState(() => _busy.add(id));
     try {
       await widget.ha.callService(action.domain, action.service, entityId: id);
       if (e.domain == 'scene' || e.domain == 'script' || e.domain == 'button' || e.domain == 'input_button') {
-        _showMessage('${e.name} ausgeführt');
+        _showMessage('$name ausgeführt');
       }
     } catch (err) {
       _showMessage('Fehler: $err');
@@ -321,8 +323,9 @@ class QuickPanelState extends State<QuickPanel> {
                 _toggleEntity(id);
               },
               child: EntityTile(
-                id: id,
                 entity: widget.ha.states[id],
+                name: entityName(widget.config, id, widget.ha.states[id]),
+                icon: entityIcon(widget.config, id, widget.ha.states[id]),
                 selected: i == _selected,
                 busy: _busy.contains(id),
               ),
@@ -417,15 +420,17 @@ class GroupHeader extends StatelessWidget {
 }
 
 class EntityTile extends StatelessWidget {
-  final String id;
   final HaEntity? entity;
+  final String name;
+  final IconData icon;
   final bool selected;
   final bool busy;
 
   const EntityTile({
     super.key,
-    required this.id,
     required this.entity,
+    required this.name,
+    required this.icon,
     required this.selected,
     required this.busy,
   });
@@ -460,7 +465,7 @@ class EntityTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(e == null ? Icons.help_outline : iconFor(e), color: iconColor, size: 32 * s),
+                  Icon(icon, color: iconColor, size: 32 * s),
                   const Spacer(),
                   if (busy)
                     SizedBox(
@@ -472,7 +477,7 @@ class EntityTile extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                e?.name ?? id,
+                name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(

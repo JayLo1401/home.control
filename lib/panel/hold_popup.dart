@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/config.dart';
 import '../core/theme.dart';
+import '../ha/entity_look.dart';
 import '../ha/ha_client.dart';
 import '../ha/ha_entity.dart';
 
@@ -13,6 +14,7 @@ enum _HoldState { holding, running, done, cancelled, failed }
 /// Laeuft der Ring durch, wird die Aktion ausgefuehrt; [release] vorher = abgebrochen.
 class HoldPopup extends StatefulWidget {
   final HaClient ha;
+  final AppConfig config;
   final LongPressAction action;
   final VoidCallback onClose;
 
@@ -22,6 +24,7 @@ class HoldPopup extends StatefulWidget {
   const HoldPopup({
     super.key,
     required this.ha,
+    required this.config,
     required this.action,
     required this.onClose,
     this.releasedBeforeStart = false,
@@ -77,7 +80,7 @@ class HoldPopupState extends State<HoldPopup> with SingleTickerProviderStateMixi
       final e = _entity;
       if (e == null) throw HaException('Entität ${widget.action.entityId} nicht gefunden');
       final a = longPressServiceFor(e, widget.action.mode);
-      if (a == null) throw HaException('${e.name} ist nicht schaltbar');
+      if (a == null) throw HaException('${entityName(widget.config, e.entityId, e)} ist nicht schaltbar');
       await widget.ha.callService(a.domain, a.service, entityId: e.entityId);
       if (mounted) setState(() => _state = _HoldState.done);
     } catch (err) {
@@ -98,7 +101,7 @@ class HoldPopupState extends State<HoldPopup> with SingleTickerProviderStateMixi
 
   @override
   Widget build(BuildContext context) {
-    final name = _entity?.name ?? widget.action.entityId;
+    final name = entityName(widget.config, widget.action.entityId, _entity);
     final (color, icon, title) = switch (_state) {
       _HoldState.holding => (brandGreen, Icons.touch_app, 'Gedrückt halten …'),
       _HoldState.running => (brandGreen, Icons.sync, 'Wird ausgeführt …'),

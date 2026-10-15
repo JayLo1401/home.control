@@ -98,6 +98,7 @@ class _OverlayAppState extends State<OverlayApp> {
           _Mode.hold => HoldPopup(
               key: _holdKey,
               ha: _ha,
+              config: _config,
               action: _panel!.longPress!,
               releasedBeforeStart: _holdReleased,
               onClose: _close,

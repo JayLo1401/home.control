@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:home_control/core/config.dart';
 import 'package:home_control/core/theme.dart';
+import 'package:home_control/ha/entity_look.dart';
 import 'package:home_control/ha/ha_client.dart';
 import 'package:home_control/ha/ha_entity.dart';
 import 'package:home_control/panel/quick_panel.dart';
@@ -45,6 +46,28 @@ light.huette
     expect(c.panels.first.longPress?.mode, 'off');
     expect(c.panelForKey(82)?.name, 'Wohnzimmer');
     expect(c.panels[1].keyCode, 0);
+  });
+
+  test('Eigene Namen/Symbole: Textformat und Aufloesung', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    await Mdi.load();
+    final c = AppConfig()
+      ..panelsFromText('== Garten\n-- Whirlpool\nswitch.pumpe | Pumpe | mdi:hot-tub\nsensor.temp\n--');
+    expect(c.overrides['switch.pumpe']?.name, 'Pumpe');
+    expect(c.panelsToText(), contains('switch.pumpe | Pumpe | mdi:hot-tub'));
+
+    const e = HaEntity('switch.pumpe', 'on', {'friendly_name': 'Whirlpool Pumpe', 'icon': 'mdi:pump'});
+    expect(entityName(c, 'switch.pumpe', e), 'Pumpe');
+    expect(entityIcon(c, 'switch.pumpe', e), mdiIcon('mdi:hot-tub'));
+    expect(mdiIcon('mdi:hot-tub'), isNotNull);
+
+    // ohne eigenes Symbol: das in HA gesetzte
+    c.setOverride('switch.pumpe', name: 'Pumpe');
+    expect(entityIcon(c, 'switch.pumpe', e), mdiIcon('mdi:pump'));
+    // "| |" entfernt eigene Werte wieder
+    c.panelsFromText('== Garten\nswitch.pumpe | |');
+    expect(c.overrides.containsKey('switch.pumpe'), isFalse);
+    expect(entityName(c, 'switch.pumpe', e), 'Whirlpool Pumpe');
   });
 
   test('JSON-Roundtrip', () {
@@ -104,7 +127,7 @@ light.huette
     key.currentState!.handleKey(PanelKey.down);
     await tester.pump();
     final tiles = tester.widgetList<EntityTile>(find.byType(EntityTile)).toList();
-    expect(tiles.where((t) => t.selected).single.id, 'switch.pumpe');
+    expect(tiles.where((t) => t.selected).single.name, 'Whirlpool Pumpe Massagedüsen');
   });
 
   for (final cols in [2, 4, 6, 8]) {

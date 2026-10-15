@@ -97,7 +97,8 @@ ${saved ? '<p class="ok">Gespeichert ✔ – die TV-App übernimmt die Werte sof
   <textarea name="panels" placeholder="== Wohnzimmer&#10;light.wohnzimmer&#10;-- Whirlpool&#10;switch.whirlpool_pumpe&#10;sensor.whirlpool_temperatur&#10;--&#10;scene.kino">${_esc(c.panelsToText())}</textarea>
   <small>
     <code>== Name</code> beginnt ein Panel, <code>-- Name</code> eine Gruppe, <code>--</code> allein beendet die Gruppe.
-    Eine Entität pro Zeile, Reihenfolge = Anzeige. Sensoren in einer Gruppe erscheinen als Wert auf der Gruppenkachel.
+    Eine Entität pro Zeile, Reihenfolge = Anzeige. Sensoren in einer Gruppe erscheinen als Wert in der Gruppenüberschrift.
+    Eigener Name/Symbol: <code>switch.pumpe | Pumpe | mdi:pump</code> (Symbolnamen wie in HA, siehe pictogrammers.com/library/mdi).
     Taste und Lang-Drücken-Aktion werden in der TV-App eingestellt und bleiben erhalten, solange der Panelname gleich bleibt.
   </small>
   <button type="submit">Speichern</button>

@@ -36,8 +36,12 @@ Mit den Pfeiltasten wählst du, mit OK schaltest du, mit Zurück oder der Panel-
 ```
 
 ```
-flutter build apk --release --split-per-abi   # kleinere APKs (armeabi-v7a reicht für Xiaomi-Boxen)
+flutter build apk --release --no-tree-shake-icons --split-per-abi   # kleinere APKs
 flutter test
 ```
+
+`--no-tree-shake-icons` ist nötig, weil die Symbole aus HA (`mdi:…`) erst zur Laufzeit feststehen.
+Die Symbole stammen aus [Material Design Icons](https://pictogrammers.com/library/mdi/) (@mdi/font 7.4.47, Apache 2.0)
+und liegen unter `assets/mdi/`.
 
 Hinweis: In `android/gradle.properties` steht `kotlin.incremental=false`. Das ist nötig, weil das Projekt auf D: und der Pub-Cache auf C: liegen.
