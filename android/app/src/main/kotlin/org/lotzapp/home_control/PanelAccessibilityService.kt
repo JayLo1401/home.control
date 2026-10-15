@@ -18,17 +18,25 @@ import io.flutter.plugin.common.MethodChannel
 /**
  * Hintergrunddienst.
  *
- * Faengt per Key-Filter die angelernte Fernbedienungstaste ab und blendet das Flutter-Panel
- * als Accessibility-Overlay ueber dem aktuellen Bild ein (kein "Ueber anderen Apps anzeigen"
- * noetig, das laufende Video wird nicht pausiert). Solange das Panel offen ist, werden die
- * Steuertasten hier abgefangen und an Flutter weitergereicht – das Overlay-Fenster selbst
- * braucht dadurch keinen Fokus.
+ * Faengt per Key-Filter die Panel-Tasten ab und blendet das Flutter-UI als
+ * Accessibility-Overlay ueber dem aktuellen Bild ein (kein "Ueber anderen Apps anzeigen"
+ * noetig, das laufende Video wird nicht pausiert).
+ *
+ * - kurzer Druck  -> Panel der Taste oeffnen
+ * - langer Druck  -> (falls konfiguriert) Halte-Popup; Flutter fuehrt die Aktion aus,
+ *                    wenn bis zum Ende gehalten wird, sonst "Abgebrochen"
+ *
+ * Solange das Overlay offen ist, werden die Steuertasten hier abgefangen und an Flutter
+ * weitergereicht – das Overlay-Fenster selbst braucht dadurch keinen Fokus.
  */
 class PanelAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "HomeControl"
         private const val CHANNEL = "home_control/overlay"
+
+        /** Ab dieser Haltezeit gilt der Druck als lang. */
+        private const val LONG_PRESS_MS = 500L
 
         @Volatile
         var instance: PanelAccessibilityService? = null
@@ -49,13 +57,22 @@ class PanelAccessibilityService : AccessibilityService() {
     /** Tasten, deren DOWN wir verschluckt haben – das passende UP wird ebenfalls verschluckt. */
     private val swallowedDown = mutableSetOf<Int>()
 
+    /** Panel-Taste, die gerade gehalten wird (kurz/lang noch nicht entschieden oder Halte-Popup offen). */
+    private var pressedKey: Int? = null
+    private var holdActive = false
+    private val longPressRunnable = Runnable {
+        val key = pressedKey ?: return@Runnable
+        holdActive = true
+        showOverlay(mapOf("mode" to "hold", "key" to key))
+    }
+
     val isOverlayVisible: Boolean get() = flutterView != null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         startEngine()
-        Log.i(TAG, "Dienst verbunden, Taste=${NativePrefs.keyName(NativePrefs.triggerKey(this))}")
+        Log.i(TAG, "Dienst verbunden, Tasten=${NativePrefs.bindings(this).keys.map(NativePrefs::keyName)}")
     }
 
     private fun startEngine() {
@@ -86,6 +103,21 @@ class PanelAccessibilityService : AccessibilityService() {
         val code = event.keyCode
         val down = event.action == KeyEvent.ACTION_DOWN
 
+        // Gehaltene Panel-Taste: Wiederholungen schlucken, beim Loslassen entscheiden.
+        if (code == pressedKey) {
+            if (!down) {
+                pressedKey = null
+                mainHandler.removeCallbacks(longPressRunnable)
+                if (holdActive) {
+                    holdActive = false
+                    channel?.invokeMethod("holdRelease", null)
+                } else {
+                    showOverlay(mapOf("mode" to "panel", "key" to code))
+                }
+            }
+            return true
+        }
+
         if (!down && swallowedDown.remove(code)) return true
 
         // Anlernmodus: erste gedrueckte Taste melden und verschlucken.
@@ -98,14 +130,16 @@ class PanelAccessibilityService : AccessibilityService() {
             }
         }
 
-        val trigger = NativePrefs.triggerKey(this)
+        val bindings = NativePrefs.bindings(this)
 
         if (isOverlayVisible) {
             if (isPassThrough(code)) return false
             if (down) {
                 swallowedDown.add(code)
-                if (event.repeatCount == 0 && (code == trigger || code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE)) {
+                if (event.repeatCount == 0 && bindings.containsKey(code)) {
                     hideOverlay()
+                } else if (event.repeatCount == 0 && (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE)) {
+                    sendBack()
                 } else {
                     panelKey(code)?.let { channel?.invokeMethod("key", it) }
                 }
@@ -113,14 +147,31 @@ class PanelAccessibilityService : AccessibilityService() {
             return true
         }
 
-        if (trigger != KeyEvent.KEYCODE_UNKNOWN && code == trigger) {
-            if (down) {
+        val binding = bindings[code] ?: return false
+        if (down && event.repeatCount == 0) {
+            if (binding.hasLongPress) {
+                pressedKey = code
+                mainHandler.postDelayed(longPressRunnable, LONG_PRESS_MS)
+            } else {
+                // Ohne Lang-Druecken-Aktion sofort oeffnen.
                 swallowedDown.add(code)
-                if (event.repeatCount == 0) showOverlay()
+                showOverlay(mapOf("mode" to "panel", "key" to code))
             }
-            return true
         }
-        return false
+        return true
+    }
+
+    /** Zurueck: Flutter entscheidet (Gruppe verlassen); sonst schliessen. */
+    private fun sendBack() {
+        val ch = channel ?: return hideOverlay()
+        ch.invokeMethod("back", null, object : MethodChannel.Result {
+            override fun success(result: Any?) {
+                if (result != true) hideOverlay()
+            }
+
+            override fun error(code: String, msg: String?, details: Any?) = hideOverlay()
+            override fun notImplemented() = hideOverlay()
+        })
     }
 
     /** Diese Tasten bleiben auch bei offenem Panel beim System (Lautstaerke etc.). */
@@ -140,35 +191,42 @@ class PanelAccessibilityService : AccessibilityService() {
         else -> null
     }
 
-    fun showOverlay() {
-        if (isOverlayVisible) return
+    /**
+     * Zeigt das Overlay. [args]: mode = "panel" | "hold", key = Tastencode
+     * (oder panelIndex beim Test aus der App).
+     */
+    fun showOverlay(args: Map<String, Any>) {
         startEngine()
         val e = engine ?: return
-        val view = FlutterView(this, FlutterTextureView(this))
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-            PixelFormat.TRANSLUCENT
-        )
-        try {
-            windowManager.addView(view, params)
-        } catch (t: Throwable) {
-            Log.e(TAG, "Overlay konnte nicht angezeigt werden", t)
-            return
+        if (!isOverlayVisible) {
+            val view = FlutterView(this, FlutterTextureView(this))
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                PixelFormat.TRANSLUCENT
+            )
+            try {
+                windowManager.addView(view, params)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Overlay konnte nicht angezeigt werden", t)
+                return
+            }
+            view.attachToFlutterEngine(e)
+            flutterView = view
+            e.lifecycleChannel.appIsResumed()
         }
-        view.attachToFlutterEngine(e)
-        flutterView = view
-        e.lifecycleChannel.appIsResumed()
-        channel?.invokeMethod("shown", null)
+        channel?.invokeMethod("show", args)
     }
 
     fun hideOverlay() {
         val view = flutterView ?: return
         flutterView = null
+        // holdActive bleibt bewusst stehen: wird die Taste nach Ausfuehrung noch gehalten,
+        // darf das Loslassen nicht als kurzer Druck (Panel oeffnen) gewertet werden.
         channel?.invokeMethod("hidden", null)
         engine?.lifecycleChannel?.appIsInactive()
         view.detachFromFlutterEngine()
@@ -184,6 +242,7 @@ class PanelAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(longPressRunnable)
         hideOverlay()
         engine?.destroy()
         engine = null

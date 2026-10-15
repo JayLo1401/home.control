@@ -8,7 +8,22 @@ class EntityPickerPage extends StatefulWidget {
   final HaClient ha;
   final List<String> selected;
 
-  const EntityPickerPage({super.key, required this.ha, required this.selected});
+  /// Einzelauswahl: Antippen gibt sofort `[entityId]` zurueck.
+  final bool single;
+
+  /// Optionaler Filter (z. B. nur schaltbare Entitaeten).
+  final bool Function(HaEntity)? filter;
+
+  final String? title;
+
+  const EntityPickerPage({
+    super.key,
+    required this.ha,
+    this.selected = const [],
+    this.single = false,
+    this.filter,
+    this.title,
+  });
 
   @override
   State<EntityPickerPage> createState() => _EntityPickerPageState();
@@ -27,6 +42,7 @@ class _EntityPickerPageState extends State<EntityPickerPage> {
   @override
   Widget build(BuildContext context) {
     final all = widget.ha.states.values
+        .where((e) => widget.filter == null || widget.filter!(e))
         .where((e) => _domain == null || e.domain == _domain)
         .where((e) =>
             _query.isEmpty ||
@@ -36,14 +52,15 @@ class _EntityPickerPageState extends State<EntityPickerPage> {
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     return PopScope(
-      canPop: false,
+      canPop: widget.single,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) Navigator.of(context).pop(_selected);
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('Entitäten wählen (${_selected.length})'),
+          title: Text(widget.title ?? (widget.single ? 'Entität wählen' : 'Entitäten wählen (${_selected.length})')),
           actions: [
+            if (!widget.single)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: FilledButton.icon(
@@ -80,6 +97,14 @@ class _EntityPickerPageState extends State<EntityPickerPage> {
                 itemCount: all.length,
                 itemBuilder: (context, i) {
                   final e = all[i];
+                  if (widget.single) {
+                    return ListTile(
+                      leading: Icon(iconFor(e)),
+                      title: Text(e.name),
+                      subtitle: Text('${e.entityId} · ${stateLabel(e)}'),
+                      onTap: () => Navigator.of(context).pop([e.entityId]),
+                    );
+                  }
                   final on = _selected.contains(e.entityId);
                   return CheckboxListTile(
                     value: on,

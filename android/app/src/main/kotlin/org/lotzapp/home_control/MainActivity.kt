@@ -3,6 +3,7 @@ package org.lotzapp.home_control
 import android.content.Intent
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -12,12 +13,20 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Nach "Beenden erzwingen" ist der Dienst aus – mit adb-Berechtigung selbst wieder einschalten.
+        ServiceEnabler.ensureEnabled(this)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "home_control/native")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "isServiceEnabled" -> result.success(PanelAccessibilityService.instance != null)
+
+                    "canAutoEnable" -> result.success(ServiceEnabler.canWriteSecureSettings(this))
 
                     "openAccessibilitySettings" -> {
                         try {
@@ -28,13 +37,16 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
-                    "getTriggerKey" -> {
-                        val code = NativePrefs.triggerKey(this)
+                    "getLegacyTriggerKey" -> {
+                        val code = NativePrefs.legacyTriggerKey(this)
                         result.success(mapOf("code" to code, "name" to NativePrefs.keyName(code)))
                     }
 
-                    "setTriggerKey" -> {
-                        NativePrefs.setTriggerKey(this, call.argument<Int>("code") ?: 0)
+                    "setKeyBindings" -> {
+                        val list = call.argument<List<Map<String, Any>>>("bindings") ?: emptyList()
+                        NativePrefs.setBindings(this, list.map {
+                            KeyBinding((it["code"] as Number).toInt(), it["longPress"] == true)
+                        })
                         result.success(null)
                     }
 
@@ -59,7 +71,7 @@ class MainActivity : FlutterActivity() {
 
                     "showOverlay" -> {
                         val service = PanelAccessibilityService.instance
-                        service?.showOverlay()
+                        service?.showOverlay(mapOf("mode" to "panel", "panelIndex" to (call.argument<Int>("panelIndex") ?: 0)))
                         result.success(service != null)
                     }
 

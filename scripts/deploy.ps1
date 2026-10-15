@@ -19,6 +19,10 @@
 .PARAMETER All
     Ohne Nachfrage auf allen verbundenen Geraeten installieren.
 
+.PARAMETER Device
+    Ohne Nachfrage auf allen Geraeten installieren, deren Modell, Hersteller
+    oder Seriennummer diesen Text enthaelt (z.B. -Device MiTV).
+
 .PARAMETER EnableService
     Schaltet nach der Installation den Hintergrunddienst (Bedienungshilfe)
     per adb ein - praktisch, wenn er im TV-Menue fehlt oder nach einem
@@ -33,11 +37,14 @@
     ./scripts/deploy.ps1 -Release -EnableService -Launch
 .EXAMPLE
     ./scripts/deploy.ps1 -Release -SkipBuild -All
+.EXAMPLE
+    ./scripts/deploy.ps1 -Release -Device MiTV
 #>
 param(
     [switch]$Release,
     [switch]$SkipBuild,
     [switch]$All,
+    [string]$Device,
     [switch]$EnableService,
     [switch]$Launch
 )
@@ -106,6 +113,10 @@ foreach ($serial in $serials) {
 
 if ($All) {
     $chosen = $devices
+} elseif ($Device) {
+    $chosen = @($devices | Where-Object {
+        "$($_.Manufacturer) $($_.Model) $($_.Serial)" -like "*$Device*"
+    })
 } else {
     Write-Host ""
     Write-Host "Verbundene Geraete:" -ForegroundColor Cyan
@@ -166,6 +177,14 @@ foreach ($d in $chosen) {
         continue
     }
     Write-Host "  OK" -ForegroundColor Green
+
+    # Erlaubt der App, ihren Dienst nach Neustart/"Beenden erzwingen" selbst wieder einzuschalten.
+    & $adb -s $d.Serial shell pm grant $package android.permission.WRITE_SECURE_SETTINGS
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  Autostart-Berechtigung erteilt" -ForegroundColor Green
+    } else {
+        Write-Host "  Autostart-Berechtigung konnte nicht erteilt werden" -ForegroundColor Yellow
+    }
 
     if ($EnableService) {
         Enable-PanelService $d.Serial

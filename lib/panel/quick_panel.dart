@@ -14,9 +14,10 @@ enum PanelKey { up, down, left, right, select }
 class QuickPanel extends StatefulWidget {
   final HaClient ha;
   final AppConfig config;
+  final PanelConfig? panel;
   final VoidCallback onClose;
 
-  const QuickPanel({super.key, required this.ha, required this.config, required this.onClose});
+  const QuickPanel({super.key, required this.ha, required this.config, required this.panel, required this.onClose});
 
   @override
   State<QuickPanel> createState() => QuickPanelState();
@@ -24,6 +25,11 @@ class QuickPanel extends StatefulWidget {
 
 class QuickPanelState extends State<QuickPanel> {
   int _selected = 0;
+
+  /// Geoeffnete Gruppe (null = Panel-Uebersicht) und Auswahl in der Uebersicht.
+  GroupItem? _group;
+  int _rootSelected = 0;
+
   final _tileKeys = <int, GlobalKey>{};
   final _busy = <String>{};
   Timer? _idleTimer;
@@ -31,7 +37,12 @@ class QuickPanelState extends State<QuickPanel> {
   String? _message;
   Timer? _messageTimer;
 
-  List<String> get _ids => widget.config.entities;
+  /// Aktuell angezeigte Kacheln.
+  List<PanelItem> get _items {
+    final g = _group;
+    if (g != null) return [for (final id in g.entities) EntityItem(id)];
+    return widget.panel?.items ?? const [];
+  }
 
   @override
   void initState() {
@@ -48,7 +59,8 @@ class QuickPanelState extends State<QuickPanel> {
       oldWidget.ha.removeListener(_onHa);
       widget.ha.addListener(_onHa);
     }
-    if (_selected >= _ids.length) _selected = 0;
+    if (oldWidget.panel != widget.panel) _group = null;
+    if (_selected >= _items.length) _selected = 0;
   }
 
   @override
@@ -70,9 +82,21 @@ class QuickPanelState extends State<QuickPanel> {
     if (s > 0) _idleTimer = Timer(Duration(seconds: s), widget.onClose);
   }
 
+  /// Zurueck-Taste: Gruppe verlassen. `false` = Panel schliessen.
+  bool handleBack() {
+    _restartIdle();
+    if (_group == null) return false;
+    setState(() {
+      _group = null;
+      _selected = _rootSelected;
+    });
+    _scrollToSelected();
+    return true;
+  }
+
   void handleKey(PanelKey key) {
     _restartIdle();
-    final n = _ids.length;
+    final n = _items.length;
     if (n == 0) return;
     final cols = widget.config.columns;
     var i = _selected;
@@ -95,17 +119,36 @@ class QuickPanelState extends State<QuickPanel> {
     }
     if (i != _selected) {
       setState(() => _selected = i);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final ctx = _tileKeys[i]?.currentContext;
-        if (ctx != null) {
-          Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 150), alignment: 0.5);
-        }
-      });
+      _scrollToSelected();
     }
   }
 
+  void _scrollToSelected() {
+    final i = _selected;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _tileKeys[i]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 150), alignment: 0.5);
+      }
+    });
+  }
+
   Future<void> _activate(int index) async {
-    final id = _ids[index];
+    final item = _items[index];
+    switch (item) {
+      case GroupItem():
+        setState(() {
+          _rootSelected = index;
+          _group = item;
+          _selected = 0;
+        });
+        _scrollToSelected();
+      case EntityItem(:final entityId):
+        await _toggleEntity(entityId);
+    }
+  }
+
+  Future<void> _toggleEntity(String id) async {
     final e = widget.ha.states[id];
     if (e == null) return;
     final action = primaryAction(e);
@@ -187,11 +230,27 @@ class QuickPanelState extends State<QuickPanel> {
       HaStatus.notConfigured => (Colors.grey, 'Nicht eingerichtet'),
       HaStatus.disconnected => (Colors.redAccent, 'Getrennt'),
     };
+    final titleStyle = TextStyle(fontSize: 24 * s, fontWeight: FontWeight.w600);
     return Row(
       children: [
-        Icon(Icons.home_rounded, color: brandGreen, size: 32 * s),
+        Icon(_group == null ? Icons.home_rounded : Icons.workspaces, color: brandGreen, size: 32 * s),
         SizedBox(width: 12 * s),
-        Text('Home Control', style: TextStyle(fontSize: 24 * s, fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text.rich(
+            TextSpan(children: [
+              TextSpan(
+                text: widget.panel?.name ?? 'Home Control',
+                style: _group == null ? titleStyle : titleStyle.copyWith(color: Colors.white54, fontWeight: FontWeight.w400),
+              ),
+              if (_group != null) ...[
+                TextSpan(text: '  ›  ', style: titleStyle.copyWith(color: Colors.white38)),
+                TextSpan(text: _group!.name, style: titleStyle),
+              ],
+            ]),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
         const Spacer(),
         Container(
           width: 10 * s,
@@ -210,11 +269,16 @@ class QuickPanelState extends State<QuickPanel> {
     if (!widget.config.isConfigured) {
       return _hint(s, Icons.settings, 'Home Assistant ist noch nicht eingerichtet.\nÖffne die App „Home Control“.');
     }
-    if (_ids.isEmpty) {
-      return _hint(s, Icons.playlist_add, 'Noch keine Entitäten ausgewählt.\nÖffne die App „Home Control“.');
+    if (widget.panel == null) {
+      return _hint(s, Icons.dashboard_customize, 'Für diese Taste ist kein Panel eingerichtet.');
+    }
+    final items = _items;
+    if (items.isEmpty) {
+      return _hint(s, Icons.playlist_add, 'Hier ist noch nichts eingetragen.\nÖffne die App „Home Control“.');
     }
     final cols = widget.config.columns;
     return GridView.builder(
+      key: ValueKey(_group), // Scrollposition je Ebene
       padding: EdgeInsets.all(8 * s),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: cols,
@@ -222,9 +286,9 @@ class QuickPanelState extends State<QuickPanel> {
         crossAxisSpacing: 14 * s,
         childAspectRatio: 1.55,
       ),
-      itemCount: _ids.length,
+      itemCount: items.length,
       itemBuilder: (context, i) {
-        final id = _ids[i];
+        final item = items[i];
         final key = _tileKeys.putIfAbsent(i, GlobalKey.new);
         return GestureDetector(
           key: key,
@@ -233,13 +297,16 @@ class QuickPanelState extends State<QuickPanel> {
             _restartIdle();
             _activate(i);
           },
-          child: EntityTile(
-            id: id,
-            entity: widget.ha.states[id],
-            selected: i == _selected,
-            busy: _busy.contains(id),
-            scale: s,
-          ),
+          child: switch (item) {
+            EntityItem(:final entityId) => EntityTile(
+                id: entityId,
+                entity: widget.ha.states[entityId],
+                selected: i == _selected,
+                busy: _busy.contains(entityId),
+                scale: s,
+              ),
+            GroupItem() => GroupTile(group: item, ha: widget.ha, selected: i == _selected, scale: s),
+          },
         );
       },
     );
@@ -258,14 +325,47 @@ class QuickPanelState extends State<QuickPanel> {
 
   Widget _footer(double s) {
     final style = TextStyle(fontSize: 14 * s, color: Colors.white54);
+    final hint = _group == null
+        ? '◀ ▲ ▼ ▶  auswählen   ·   OK  schalten / öffnen   ·   Zurück  schließen'
+        : '◀ ▲ ▼ ▶  auswählen   ·   OK  schalten   ·   Zurück  zur Übersicht';
     return SizedBox(
       height: 22 * s,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 200),
         child: _message != null
             ? Text(_message!, key: const ValueKey('msg'), style: style.copyWith(color: accentAmber), textAlign: TextAlign.center)
-            : Text('◀ ▲ ▼ ▶  auswählen   ·   OK  schalten   ·   Zurück  schließen',
-                key: const ValueKey('hint'), style: style, textAlign: TextAlign.center),
+            : Text(hint, key: ValueKey(hint), style: style, textAlign: TextAlign.center),
+      ),
+    );
+  }
+}
+
+/// Gemeinsamer Kachelrahmen (Fokusrahmen, Hervorhebung bei "aktiv").
+class _TileFrame extends StatelessWidget {
+  final bool selected;
+  final bool active;
+  final double scale;
+  final Widget child;
+
+  const _TileFrame({required this.selected, required this.active, required this.scale, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = scale;
+    final focus = Theme.of(context).focusColor;
+    return AnimatedScale(
+      scale: selected ? 1.05 : 1.0,
+      duration: const Duration(milliseconds: 120),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: EdgeInsets.all(14 * s),
+        decoration: BoxDecoration(
+          color: active ? Color.lerp(tileBackground, accentAmber, 0.14) : tileBackground,
+          borderRadius: BorderRadius.circular(16 * s),
+          border: Border.all(color: selected ? focus : Colors.white10, width: selected ? 3 : 1),
+          boxShadow: selected ? [BoxShadow(color: focus.withValues(alpha: 0.5), blurRadius: 14, spreadRadius: 1)] : null,
+        ),
+        child: child,
       ),
     );
   }
@@ -294,56 +394,115 @@ class EntityTile extends StatelessWidget {
     final active = e != null && isActive(e);
     final unavailable = e == null || e.isUnavailable;
     final iconColor = unavailable ? Colors.white24 : (active ? accentAmber : Colors.white70);
-    final focus = Theme.of(context).focusColor;
 
-    return AnimatedScale(
-      scale: selected ? 1.05 : 1.0,
-      duration: const Duration(milliseconds: 120),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.all(14 * s),
-        decoration: BoxDecoration(
-          color: active ? Color.lerp(tileBackground, accentAmber, 0.14) : tileBackground,
-          borderRadius: BorderRadius.circular(16 * s),
-          border: Border.all(color: selected ? focus : Colors.white10, width: selected ? 3 : 1),
-          boxShadow: selected ? [BoxShadow(color: focus.withValues(alpha: 0.5), blurRadius: 14, spreadRadius: 1)] : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(e == null ? Icons.help_outline : iconFor(e), color: iconColor, size: 34 * s),
-                const Spacer(),
-                if (busy)
-                  SizedBox(
-                    width: 18 * s,
-                    height: 18 * s,
-                    child: const CircularProgressIndicator(strokeWidth: 2, color: accentAmber),
-                  ),
-              ],
+    return _TileFrame(
+      selected: selected,
+      active: active,
+      scale: s,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(e == null ? Icons.help_outline : iconFor(e), color: iconColor, size: 34 * s),
+              const Spacer(),
+              if (busy)
+                SizedBox(
+                  width: 18 * s,
+                  height: 18 * s,
+                  child: const CircularProgressIndicator(strokeWidth: 2, color: accentAmber),
+                ),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            e?.name ?? id,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 17 * s,
+              fontWeight: FontWeight.w600,
+              color: unavailable ? Colors.white54 : Colors.white,
+              height: 1.15,
             ),
-            const Spacer(),
-            Text(
-              e?.name ?? id,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 17 * s,
-                fontWeight: FontWeight.w600,
-                color: unavailable ? Colors.white54 : Colors.white,
-                height: 1.15,
+          ),
+          SizedBox(height: 4 * s),
+          Text(
+            e == null ? 'Nicht gefunden' : stateLabel(e),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14 * s, color: active ? accentAmber : Colors.white60),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gruppenkachel: Sensorwerte gross, darunter was gerade an/offen ist.
+class GroupTile extends StatelessWidget {
+  final GroupItem group;
+  final HaClient ha;
+  final bool selected;
+  final double scale;
+
+  const GroupTile({super.key, required this.group, required this.ha, required this.selected, required this.scale});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = scale;
+    final entities = [for (final id in group.entities) ?ha.states[id]];
+    final sensorValues = [
+      for (final e in entities)
+        if (isSensor(e) && !e.isUnavailable) stateLabel(e),
+    ];
+    final activeNames = [
+      for (final e in entities)
+        if (!isSensor(e) && isActive(e)) e.name,
+    ];
+    final active = activeNames.isNotEmpty;
+    final status = active
+        ? 'An: ${activeNames.join(', ')}'
+        : (entities.any((e) => !isSensor(e)) ? 'Alles aus' : '${group.entities.length} Einträge');
+
+    return _TileFrame(
+      selected: selected,
+      active: active,
+      scale: s,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.workspaces, color: active ? accentAmber : brandGreen, size: 30 * s),
+              SizedBox(width: 10 * s),
+              Expanded(
+                child: Text(
+                  group.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 18 * s, fontWeight: FontWeight.w700),
+                ),
               ),
-            ),
-            SizedBox(height: 4 * s),
+              Icon(Icons.chevron_right, color: Colors.white38, size: 24 * s),
+            ],
+          ),
+          const Spacer(),
+          if (sensorValues.isNotEmpty)
             Text(
-              e == null ? 'Nicht gefunden' : stateLabel(e),
+              sensorValues.join('  ·  '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 14 * s, color: active ? accentAmber : Colors.white60),
+              style: TextStyle(fontSize: 24 * s, fontWeight: FontWeight.w300, height: 1.1),
             ),
-          ],
-        ),
+          SizedBox(height: 4 * s),
+          Text(
+            status,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14 * s, color: active ? accentAmber : Colors.white60),
+          ),
+        ],
       ),
     );
   }

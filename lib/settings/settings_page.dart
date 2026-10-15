@@ -1,20 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../core/config.dart';
 import '../core/native_bridge.dart';
 import '../core/theme.dart';
 import '../ha/ha_client.dart';
 import '../ha/ha_discovery.dart';
-import '../ha/ha_entity.dart';
-import '../panel/quick_panel.dart';
-import 'entity_picker_page.dart';
+import 'panel_edit_page.dart';
 import 'web_setup_server.dart';
-
-/// Tasten, die nicht als Ausloeser taugen (sonst ist die Navigation blockiert).
-const _forbiddenKeys = {3, 4, 19, 20, 21, 22, 23, 66};
+import 'widgets.dart';
 
 class SettingsPage extends StatefulWidget {
   final HaClient ha;
@@ -27,7 +20,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   AppConfig _config = AppConfig();
   bool _serviceOn = false;
-  TriggerKey _trigger = const TriggerKey(0, '');
+  bool _autoEnable = false;
   final _urlCtrl = TextEditingController();
   final _tokenCtrl = TextEditingController();
   late final WebSetupServer _web = WebSetupServer(onSaved: () => _load(reconnect: true));
@@ -40,9 +33,9 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _ha.addListener(_rebuild);
-    _lifecycle = AppLifecycleListener(onResume: _refreshNative);
+    _lifecycle = AppLifecycleListener(onResume: _refreshService);
     _load(reconnect: true);
-    _refreshNative();
+    _refreshService();
   }
 
   @override
@@ -61,6 +54,17 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _load({bool reconnect = false}) async {
     final c = await AppConfig.load();
+    // Migration aus 0.1: bisherige Taste dem ersten Panel zuordnen.
+    if (c.panels.isNotEmpty && c.panels.every((p) => p.keyCode == 0)) {
+      final legacy = await NativeBridge.getLegacyTriggerKey();
+      if (legacy.isSet) {
+        c.panels.first
+          ..keyCode = legacy.code
+          ..keyName = legacy.name;
+        await c.save();
+      }
+    }
+    await NativeBridge.syncKeyBindings(c);
     if (!mounted) return;
     setState(() {
       _config = c;
@@ -70,69 +74,31 @@ class _SettingsPageState extends State<SettingsPage> {
     if (reconnect) _ha.configure(c.haUrl, c.token, allowBadCertificates: c.allowBadCertificates);
   }
 
-  Future<void> _refreshNative() async {
+  Future<void> _refreshService() async {
     final on = await NativeBridge.isServiceEnabled();
-    final key = await NativeBridge.getTriggerKey();
+    final auto = await NativeBridge.canAutoEnable();
     if (mounted) {
       setState(() {
         _serviceOn = on;
-        _trigger = key;
+        _autoEnable = auto;
       });
+    }
+    // Wurde der Dienst gerade automatisch eingeschaltet, bindet Android ihn mit kurzer Verzoegerung.
+    if (!on && auto) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      final now = await NativeBridge.isServiceEnabled();
+      if (mounted && now) setState(() => _serviceOn = true);
     }
   }
 
   Future<void> _save() async {
     await _config.save();
+    await NativeBridge.syncKeyBindings(_config);
     _ha.configure(_config.haUrl, _config.token, allowBadCertificates: _config.allowBadCertificates);
   }
 
   void _snack(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-
-  // ---------------------------------------------------------------- Taste anlernen
-
-  Future<void> _learnKey() async {
-    await _refreshNative();
-    if (!mounted) return;
-    if (!_serviceOn) {
-      _snack('Zuerst den Hintergrunddienst in den Bedienungshilfen aktivieren.');
-      return;
-    }
-    var learned = false;
-    final dialog = showDialog<void>(
-      context: context,
-      builder: (_) => const AlertDialog(
-        icon: Icon(Icons.settings_remote, size: 48),
-        title: Text('Taste drücken'),
-        content: Text(
-          'Drücke jetzt auf der Fernbedienung die Taste, die das Panel öffnen soll.\n\n'
-          'Hinweis: Diese Taste verliert danach ihre normale Funktion.',
-        ),
-      ),
-    );
-    unawaited(dialog.then((_) {
-      if (!learned) NativeBridge.cancelLearn();
-    }));
-    try {
-      final key = await NativeBridge.learnKey().timeout(const Duration(seconds: 20));
-      learned = true;
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      if (_forbiddenKeys.contains(key.code)) {
-        _snack('${key.name} kann nicht verwendet werden (wird zur Navigation gebraucht).');
-        return;
-      }
-      await NativeBridge.setTriggerKey(key.code);
-      await _refreshNative();
-      _snack('Taste ${key.name} gespeichert.');
-    } on TimeoutException {
-      if (mounted) Navigator.of(context).pop();
-      _snack('Keine Taste erkannt.');
-    } on PlatformException catch (e) {
-      if (mounted) Navigator.of(context).pop();
-      _snack(e.message ?? 'Fehler');
-    }
-  }
 
   // ---------------------------------------------------------------- HA im Netz suchen
 
@@ -163,43 +129,25 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {});
   }
 
-  // ---------------------------------------------------------------- Entitaeten
+  // ---------------------------------------------------------------- Panels
 
-  Future<void> _pickEntities() async {
-    if (_ha.status != HaStatus.connected) {
-      _snack('Erst mit Home Assistant verbinden.');
-      return;
-    }
-    final result = await Navigator.of(context).push<List<String>>(
-      MaterialPageRoute(builder: (_) => EntityPickerPage(ha: _ha, selected: _config.entities)),
-    );
-    if (result != null) {
-      setState(() => _config.entities = result);
-      await _save();
-    }
-  }
-
-  void _move(int i, int delta) {
-    final j = i + delta;
-    if (j < 0 || j >= _config.entities.length) return;
-    setState(() {
-      final e = _config.entities.removeAt(i);
-      _config.entities.insert(j, e);
-    });
-    _save();
-  }
-
-  void _openPreview() {
-    Navigator.of(context).push(PageRouteBuilder(
-      opaque: false,
-      pageBuilder: (_, _, _) => _PreviewPage(ha: _ha, config: _config),
+  Future<void> _openPanel(PanelConfig p) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => PanelEditPage(ha: _ha, config: _config, panel: p, onChanged: _save),
     ));
+    setState(() {});
   }
 
-  Future<void> _testOverlay() async {
-    if (!await NativeBridge.showOverlay()) {
-      _snack('Hintergrunddienst ist nicht aktiv.');
-    }
+  Future<void> _addPanel() async {
+    final p = PanelConfig('Panel ${_config.panels.length + 1}');
+    setState(() => _config.panels.add(p));
+    await _save();
+    await _openPanel(p);
+  }
+
+  void _movePanel(int i, int delta) {
+    setState(() => _config.panels.insert(i + delta, _config.panels.removeAt(i)));
+    _save();
   }
 
   // ---------------------------------------------------------------- UI
@@ -214,16 +162,6 @@ class _SettingsPageState extends State<SettingsPage> {
           SizedBox(width: 12),
           Text('Home Control'),
         ]),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: OutlinedButton.icon(onPressed: _openPreview, icon: const Icon(Icons.preview), label: const Text('Vorschau')),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: FilledButton.icon(onPressed: _testOverlay, icon: const Icon(Icons.layers), label: const Text('Overlay testen')),
-          ),
-        ],
       ),
       body: Center(
         child: ConstrainedBox(
@@ -233,7 +171,7 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               _serviceSection(),
               _haSection(),
-              _entitySection(),
+              _panelsSection(),
               _layoutSection(),
             ],
           ),
@@ -242,57 +180,31 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _section(String title, IconData icon, List<Widget> children) => Card(
-        color: panelBackground,
-        margin: const EdgeInsets.only(bottom: 16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(children: [
-                Icon(icon, color: brandGreen),
-                const SizedBox(width: 10),
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-              ]),
-              const SizedBox(height: 12),
-              ...children,
-            ],
-          ),
+  Widget _serviceSection() => SectionCard(title: 'Hintergrunddienst', icon: Icons.settings_remote, children: [
+        StatusLine(
+          ok: _serviceOn,
+          text: _serviceOn
+              ? 'Dienst läuft'
+              : 'Dienst ist nicht aktiv – in den Bedienungshilfen „Home Control Panel“ einschalten.',
         ),
-      );
-
-  Widget _statusChip(bool ok, String okText, String badText) => Row(children: [
-        Icon(ok ? Icons.check_circle : Icons.error, color: ok ? brandGreen : Colors.redAccent),
-        const SizedBox(width: 8),
-        Expanded(child: Text(ok ? okText : badText)),
-      ]);
-
-  Widget _serviceSection() => _section('Hintergrunddienst & Taste', Icons.settings_remote, [
-        _statusChip(_serviceOn, 'Dienst läuft', 'Dienst ist nicht aktiv – in den Bedienungshilfen „Home Control Panel“ einschalten.'),
         const SizedBox(height: 8),
-        _statusChip(
-          _trigger.isSet,
-          'Panel-Taste: ${_trigger.name} (Code ${_trigger.code})',
-          'Noch keine Taste angelernt',
+        StatusLine(
+          ok: _autoEnable,
+          text: _autoEnable
+              ? 'Autostart abgesichert: Der Dienst schaltet sich nach Neustart, Update oder „Beenden erzwingen“ '
+                  '(beim nächsten Öffnen der App) selbst wieder ein.'
+              : 'Autostart nicht abgesichert. Einmalig am PC ausführen:\n'
+                  'adb shell pm grant org.lotzapp.home_control android.permission.WRITE_SECURE_SETTINGS',
         ),
         const SizedBox(height: 12),
-        Wrap(spacing: 12, runSpacing: 12, children: [
-          OutlinedButton.icon(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
             onPressed: NativeBridge.openAccessibilitySettings,
             icon: const Icon(Icons.accessibility_new),
             label: const Text('Bedienungshilfen öffnen'),
           ),
-          FilledButton.icon(onPressed: _learnKey, icon: const Icon(Icons.keyboard), label: const Text('Taste anlernen')),
-          if (_trigger.isSet)
-            TextButton(
-              onPressed: () async {
-                await NativeBridge.setTriggerKey(0);
-                _refreshNative();
-              },
-              child: const Text('Taste entfernen'),
-            ),
-        ]),
+        ),
       ]);
 
   Widget _haSection() {
@@ -303,8 +215,8 @@ class _SettingsPageState extends State<SettingsPage> {
       HaStatus.disconnected => (false, 'Nicht erreichbar: ${_ha.error ?? ''}'),
       HaStatus.notConfigured => (false, 'URL und Token eintragen'),
     };
-    return _section('Home Assistant', Icons.hub, [
-      _statusChip(ok, text, text),
+    return SectionCard(title: 'Home Assistant', icon: Icons.hub, children: [
+      StatusLine(ok: ok, text: text),
       const SizedBox(height: 12),
       Row(children: [
         Expanded(
@@ -349,78 +261,79 @@ class _SettingsPageState extends State<SettingsPage> {
         title: const Text('Einrichtung per Browser (Handy/PC)'),
         subtitle: Text(_web.isRunning
             ? 'Im Browser öffnen:\n${_webAddresses.join('\n')}'
-            : 'Token und Entitäten bequem vom Handy eintragen'),
+            : 'Token, Panels und Gruppen bequem vom Handy eintragen'),
       ),
     ]);
   }
 
-  Widget _entitySection() => _section('Entitäten im Panel', Icons.grid_view_rounded, [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: _pickEntities,
-            icon: const Icon(Icons.playlist_add),
-            label: const Text('Entitäten auswählen'),
-          ),
+  Widget _panelsSection() {
+    final panels = _config.panels;
+    return SectionCard(title: 'Panels', icon: Icons.dashboard_customize, children: [
+      const Text(
+        'Jedes Panel hat eine eigene Taste. Kurz drücken öffnet das Panel, '
+        'lang drücken löst die Lang-Drücken-Aktion aus.',
+        style: TextStyle(color: Colors.white54),
+      ),
+      const SizedBox(height: 8),
+      for (var i = 0; i < panels.length; i++)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(Icons.dashboard, color: panels[i].keyCode != 0 ? brandGreen : Colors.white38),
+          title: Text(panels[i].name),
+          subtitle: Text(_panelSummary(panels[i])),
+          onTap: () => _openPanel(panels[i]),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(onPressed: i > 0 ? () => _movePanel(i, -1) : null, icon: const Icon(Icons.arrow_upward)),
+            IconButton(
+                onPressed: i < panels.length - 1 ? () => _movePanel(i, 1) : null,
+                icon: const Icon(Icons.arrow_downward)),
+            IconButton(onPressed: () => _openPanel(panels[i]), icon: const Icon(Icons.chevron_right)),
+          ]),
         ),
-        const SizedBox(height: 8),
-        if (_config.entities.isEmpty) const Text('Noch keine Entitäten gewählt.', style: TextStyle(color: Colors.white54)),
-        for (var i = 0; i < _config.entities.length; i++) _entityRow(i),
-      ]);
-
-  Widget _entityRow(int i) {
-    final id = _config.entities[i];
-    final e = _ha.states[id];
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(e == null ? Icons.help_outline : iconFor(e)),
-      title: Text(e?.name ?? id),
-      subtitle: Text(e == null ? id : '$id · ${stateLabel(e)}'),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(onPressed: i > 0 ? () => _move(i, -1) : null, icon: const Icon(Icons.arrow_upward)),
-        IconButton(onPressed: i < _config.entities.length - 1 ? () => _move(i, 1) : null, icon: const Icon(Icons.arrow_downward)),
-        IconButton(
-          onPressed: () {
-            setState(() => _config.entities.removeAt(i));
-            _save();
-          },
-          icon: const Icon(Icons.close),
-        ),
-      ]),
-    );
+      const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.icon(onPressed: _addPanel, icon: const Icon(Icons.add), label: const Text('Panel hinzufügen')),
+      ),
+    ]);
   }
 
-  Widget _layoutSection() => _section('Darstellung', Icons.tune, [
-        _stepper('Spalten', '${_config.columns}', () => _config.columns > 2, () => _config.columns--,
-            () => _config.columns < 8, () => _config.columns++),
-        _stepper('Panelgröße', '${_config.panelPercent} %', () => _config.panelPercent > 40, () => _config.panelPercent -= 5,
-            () => _config.panelPercent < 100, () => _config.panelPercent += 5),
-        _stepper(
-            'Automatisch schließen',
-            _config.autoCloseSeconds == 0 ? 'nie' : 'nach ${_config.autoCloseSeconds} s',
-            () => _config.autoCloseSeconds > 0,
-            () => _config.autoCloseSeconds -= 10,
-            () => _config.autoCloseSeconds < 300,
-            () => _config.autoCloseSeconds += 10),
+  String _panelSummary(PanelConfig p) {
+    final groups = p.items.whereType<GroupItem>().length;
+    final entities = p.items.whereType<EntityItem>().length;
+    final lp = p.longPress;
+    return [
+      p.keyCode != 0 ? 'Taste ${p.keyName}' : 'keine Taste',
+      '$entities Entitäten, $groups Gruppen',
+      if (lp != null) 'lang: ${_ha.states[lp.entityId]?.name ?? lp.entityId}',
+    ].join(' · ');
+  }
+
+  Widget _layoutSection() => SectionCard(title: 'Darstellung', icon: Icons.tune, children: [
+        StepperRow(
+          label: 'Spalten',
+          value: '${_config.columns}',
+          onDec: _config.columns > 2 ? () => _set(() => _config.columns--) : null,
+          onInc: _config.columns < 8 ? () => _set(() => _config.columns++) : null,
+        ),
+        StepperRow(
+          label: 'Panelgröße',
+          value: '${_config.panelPercent} %',
+          onDec: _config.panelPercent > 40 ? () => _set(() => _config.panelPercent -= 5) : null,
+          onInc: _config.panelPercent < 100 ? () => _set(() => _config.panelPercent += 5) : null,
+        ),
+        StepperRow(
+          label: 'Automatisch schließen',
+          value: _config.autoCloseSeconds == 0 ? 'nie' : 'nach ${_config.autoCloseSeconds} s',
+          onDec: _config.autoCloseSeconds > 0 ? () => _set(() => _config.autoCloseSeconds -= 10) : null,
+          onInc: _config.autoCloseSeconds < 300 ? () => _set(() => _config.autoCloseSeconds += 10) : null,
+        ),
       ]);
 
-  Widget _stepper(String label, String value, bool Function() canDec, VoidCallback dec, bool Function() canInc,
-          VoidCallback inc) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
-          IconButton(
-            onPressed: canDec() ? () => setState(() { dec(); _save(); }) : null,
-            icon: const Icon(Icons.remove),
-          ),
-          SizedBox(width: 120, child: Text(value, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16))),
-          IconButton(
-            onPressed: canInc() ? () => setState(() { inc(); _save(); }) : null,
-            icon: const Icon(Icons.add),
-          ),
-        ]),
-      );
+  void _set(VoidCallback fn) {
+    setState(fn);
+    _save();
+  }
 }
 
 /// Sucht Home Assistant im Netz und laesst eine gefundene Instanz auswaehlen.
@@ -477,45 +390,6 @@ class _DiscoveryDialogState extends State<_DiscoveryDialog> {
         ),
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
       ],
-    );
-  }
-}
-
-/// Panel in der App – zum Testen auf Tablet (Touch) oder TV ohne Dienst.
-class _PreviewPage extends StatelessWidget {
-  final HaClient ha;
-  final AppConfig config;
-  _PreviewPage({required this.ha, required this.config});
-
-  final _panel = GlobalKey<QuickPanelState>();
-
-  static final _keys = {
-    LogicalKeyboardKey.arrowUp: PanelKey.up,
-    LogicalKeyboardKey.arrowDown: PanelKey.down,
-    LogicalKeyboardKey.arrowLeft: PanelKey.left,
-    LogicalKeyboardKey.arrowRight: PanelKey.right,
-    LogicalKeyboardKey.select: PanelKey.select,
-    LogicalKeyboardKey.enter: PanelKey.select,
-    LogicalKeyboardKey.numpadEnter: PanelKey.select,
-    LogicalKeyboardKey.gameButtonA: PanelKey.select,
-    LogicalKeyboardKey.space: PanelKey.select,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyUpEvent) return KeyEventResult.ignored;
-        final k = _keys[event.logicalKey];
-        if (k == null) return KeyEventResult.ignored;
-        _panel.currentState?.handleKey(k);
-        return KeyEventResult.handled;
-      },
-      child: Material(
-        type: MaterialType.transparency,
-        child: QuickPanel(key: _panel, ha: ha, config: config, onClose: () => Navigator.of(context).maybePop()),
-      ),
     );
   }
 }

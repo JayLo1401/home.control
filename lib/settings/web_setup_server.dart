@@ -45,13 +45,7 @@ class WebSetupServer {
         final token = (form['token'] ?? '').trim();
         if (token.isNotEmpty) c.token = token;
         c.allowBadCertificates = form['insecure'] == 'on';
-        if (form.containsKey('entities')) {
-          c.entities = form['entities']!
-              .split(RegExp(r'[\s,;]+'))
-              .map((e) => e.trim())
-              .where((e) => e.contains('.'))
-              .toList();
-        }
+        if (form.containsKey('panels')) c.panelsFromText(form['panels']!);
         await c.save();
         onSaved();
         _html(req, _page(c, saved: true));
@@ -85,7 +79,8 @@ class WebSetupServer {
   h1{color:#2F9E5C;margin-top:0;font-size:1.5em}
   label{display:block;margin:16px 0 6px;color:#aaa}
   input[type=text],input[type=password],textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid #333;background:#1E2630;color:#eee;font-size:1em}
-  textarea{height:220px;font-family:monospace}
+  textarea{height:360px;font-family:monospace}
+  code{color:#FFB300}
   button{margin-top:20px;width:100%;padding:14px;border:0;border-radius:12px;background:#2F9E5C;color:#fff;font-size:1.1em}
   .ok{background:#1B6B3E;padding:10px;border-radius:10px}
   small{color:#888}
@@ -98,8 +93,13 @@ ${saved ? '<p class="ok">Gespeichert ✔ – die TV-App übernimmt die Werte sof
   <label>Long-Lived Access Token ${c.token.isNotEmpty ? '<small>(gesetzt – leer lassen = unverändert)</small>' : ''}</label>
   <input type="password" name="token" placeholder="${c.token.isNotEmpty ? '••••••••' : 'Profil → Sicherheit → Token erstellen'}">
   <label><input type="checkbox" name="insecure" ${c.allowBadCertificates ? 'checked' : ''}> Selbstsignierte Zertifikate erlauben</label>
-  <label>Entitäten (eine pro Zeile, Reihenfolge = Anzeige)</label>
-  <textarea name="entities" placeholder="light.wohnzimmer&#10;switch.steckdose_tv&#10;sensor.aussentemperatur">${_esc(c.entities.join('\n'))}</textarea>
+  <label>Panels, Gruppen &amp; Entitäten</label>
+  <textarea name="panels" placeholder="== Wohnzimmer&#10;light.wohnzimmer&#10;-- Whirlpool&#10;switch.whirlpool_pumpe&#10;sensor.whirlpool_temperatur&#10;--&#10;scene.kino">${_esc(c.panelsToText())}</textarea>
+  <small>
+    <code>== Name</code> beginnt ein Panel, <code>-- Name</code> eine Gruppe, <code>--</code> allein beendet die Gruppe.
+    Eine Entität pro Zeile, Reihenfolge = Anzeige. Sensoren in einer Gruppe erscheinen als Wert auf der Gruppenkachel.
+    Taste und Lang-Drücken-Aktion werden in der TV-App eingestellt und bleiben erhalten, solange der Panelname gleich bleibt.
+  </small>
   <button type="submit">Speichern</button>
 </form>
 </main></body></html>

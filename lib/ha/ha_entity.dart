@@ -52,6 +52,35 @@ HaAction? primaryAction(HaEntity e) {
   return null;
 }
 
+/// Service fuer die Lang-Druecken-Aktion. [mode]: 'toggle', 'on', 'off'.
+HaAction? longPressServiceFor(HaEntity e, String mode) {
+  if (mode == 'toggle') return primaryAction(e);
+  return switch (e.domain) {
+    'scene' || 'script' => HaAction(e.domain, 'turn_on'),
+    'button' || 'input_button' => HaAction(e.domain, 'press'),
+    'lock' => HaAction('lock', mode == 'on' ? 'unlock' : 'lock'),
+    'cover' => HaAction('cover', mode == 'on' ? 'open_cover' : 'close_cover'),
+    _ => HaAction(e.domain, mode == 'on' ? 'turn_on' : 'turn_off'),
+  };
+}
+
+/// "eingeschaltet", "ausgeschaltet", "ausgefuehrt" … fuer das Halte-Popup.
+String longPressVerb(HaEntity e, String mode) {
+  final on = switch (mode) {
+    'on' => true,
+    'off' => false,
+    _ => !isActive(e),
+  };
+  return switch (e.domain) {
+    'scene' || 'script' || 'button' || 'input_button' => 'ausgeführt',
+    'lock' => on ? 'entriegelt' : 'verriegelt',
+    'cover' => on ? 'geöffnet' : 'geschlossen',
+    _ => on ? 'eingeschaltet' : 'ausgeschaltet',
+  };
+}
+
+bool isSensor(HaEntity e) => e.domain == 'sensor' || e.domain == 'weather';
+
 /// Aktiv = "an"/offen/laeuft – wird farbig hervorgehoben.
 bool isActive(HaEntity e) {
   switch (e.domain) {
