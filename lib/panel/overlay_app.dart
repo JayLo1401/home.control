@@ -1,16 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/config.dart';
 import '../core/theme.dart';
 import '../ha/ha_client.dart';
+import '../ha/mobile_app.dart';
+import 'doorbell_popup.dart';
 import 'hold_popup.dart';
 import 'quick_panel.dart';
 
-enum _Mode { none, panel, hold }
+enum _Mode { none, panel, hold, doorbell }
 
 /// Laeuft in der vorgewaermten Engine des Hintergrunddienstes.
-/// Haelt die HA-Verbindung dauerhaft offen, damit das Panel sofort aktuelle Werte zeigt.
+/// Haelt die HA-Verbindung dauerhaft offen: Panel zeigt sofort aktuelle Werte,
+/// Tuerglocken-Nachrichten aus HA kommen jederzeit an.
 class OverlayApp extends StatefulWidget {
   const OverlayApp({super.key});
 
@@ -24,29 +29,53 @@ class _OverlayAppState extends State<OverlayApp> {
   final _ha = HaClient();
   final _panelKey = GlobalKey<QuickPanelState>();
   final _holdKey = GlobalKey<HoldPopupState>();
+  StreamSubscription? _pushSub;
   AppConfig _config = AppConfig();
   _Mode _mode = _Mode.none;
   PanelConfig? _panel;
   bool _holdReleased = false;
+  DoorbellMessage? _doorbell;
+  int _doorbellSeq = 0;
 
   @override
   void initState() {
     super.initState();
     _channel.setMethodCallHandler(_onCall);
+    _pushSub = _ha.notifications.listen((ev) => _ring(DoorbellMessage.fromPush(ev)));
     _reloadConfig();
   }
 
   Future<AppConfig> _reloadConfig() async {
     final c = await AppConfig.load();
     _ha.configure(c.haUrl, c.token, allowBadCertificates: c.allowBadCertificates);
+    _ha.setPushWebhook(c.doorbell.webhookId);
     _config = c;
     return c;
+  }
+
+  /// Tuerglocke: Gong (mit Ducking) und Meldung ueber allem.
+  Future<void> _ring(DoorbellMessage m) async {
+    if (m.clear) {
+      if (_mode == _Mode.doorbell) _close();
+      return;
+    }
+    final d = _config.doorbell;
+    if (m.chime ?? d.chime) {
+      _channel.invokeMethod('playChime', {'times': d.chimeRepeat, 'volume': d.volumePercent / 100});
+    }
+    _doorbell = m;
+    _doorbellSeq++;
+    await _channel.invokeMethod('open', {'mode': 'doorbell'});
   }
 
   Future<dynamic> _onCall(MethodCall call) async {
     switch (call.method) {
       case 'show':
         final args = (call.arguments as Map).cast<String, dynamic>();
+        if (args['mode'] == 'doorbell') {
+          setState(() => _mode = _Mode.doorbell);
+          return null;
+        }
         _holdReleased = false;
         _ha.ensureConnected();
         final c = await _reloadConfig();
@@ -67,10 +96,17 @@ class _OverlayAppState extends State<OverlayApp> {
       case 'back':
         return _mode == _Mode.panel && (_panelKey.currentState?.handleBack() ?? false);
       case 'hidden':
+        if (_mode == _Mode.doorbell) _channel.invokeMethod('stopChime');
         setState(() => _mode = _Mode.none);
       case 'key':
         final key = PanelKey.values.asNameMap()[call.arguments as String];
-        if (key != null && _mode == _Mode.panel) _panelKey.currentState?.handleKey(key);
+        if (key == null) return null;
+        if (_mode == _Mode.panel) _panelKey.currentState?.handleKey(key);
+        if (_mode == _Mode.doorbell && key == PanelKey.select) _close();
+      case 'reload':
+        await _reloadConfig();
+      case 'testDoorbell':
+        await _ring(DoorbellMessage(title: 'Türglocke', message: 'Test: Es hat an der Tür geläutet'));
     }
     return null;
   }
@@ -79,6 +115,7 @@ class _OverlayAppState extends State<OverlayApp> {
 
   @override
   void dispose() {
+    _pushSub?.cancel();
     _ha.dispose();
     super.dispose();
   }
@@ -101,6 +138,12 @@ class _OverlayAppState extends State<OverlayApp> {
               config: _config,
               action: _panel!.longPress!,
               releasedBeforeStart: _holdReleased,
+              onClose: _close,
+            ),
+          _Mode.doorbell => DoorbellPopup(
+              key: ValueKey(_doorbellSeq), // erneutes Laeuten startet die Anzeige neu
+              message: _doorbell!,
+              config: _config,
               onClose: _close,
             ),
         },

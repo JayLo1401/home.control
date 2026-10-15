@@ -15,6 +15,26 @@ Mit den Pfeiltasten wählst du, mit OK schaltest du, mit Zurück oder der Panel-
 - **Einstellungs-App**: Dienststatus, Taste anlernen, URL und Token, Auswahl und Reihenfolge der Entitäten, Spalten, Panelgröße und Auto-Schließen.
   Unter „Einrichtung per Browser“ lassen sich Token und Entitäten vom Handy aus eintragen (`http://<tv-ip>:8765`).
 
+## Türglocke
+
+Unter **Türglocke → Bei Home Assistant anmelden** registriert sich die App wie die Companion-App über die
+`mobile_app`-Integration. In HA entsteht ein Gerät mit dem Dienst `notify.mobile_app_<gerätename>`.
+Die Nachrichten kommen lokal über den WebSocket-Push-Kanal, eine Cloud ist nicht nötig.
+
+```yaml
+- action: notify.mobile_app_home_control_mitv_afmu0
+  data:
+    title: Türglocke
+    message: Es hat an der Haustür geläutet
+    data:
+      duration: 30              # Sekunden sichtbar (optional)
+      camera: camera.haustuer   # Kamerabild, alle 2 s aktualisiert (optional)
+      chime: none               # Gong unterdrücken (optional)
+```
+
+`message: clear_notification` schließt die Meldung vorzeitig. Der Gong (`res/raw/doorbell.wav`, erzeugt mit
+`scripts/gen_chime.ps1`) fordert Audio-Fokus mit Ducking an. Laufende Musik wird dadurch kurz leiser und läuft danach normal weiter.
+
 ## Einrichtung
 
 1. Installiere die APK: `adb install -r build/app/outputs/flutter-apk/app-release.apk`

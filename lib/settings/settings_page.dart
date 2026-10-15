@@ -6,6 +6,7 @@ import '../core/native_bridge.dart';
 import '../core/theme.dart';
 import '../ha/ha_client.dart';
 import '../ha/ha_discovery.dart';
+import 'doorbell_settings.dart';
 import 'panel_edit_page.dart';
 import 'web_setup_server.dart';
 import 'widgets.dart';
@@ -126,7 +127,10 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _save() async {
     await _config.save();
     await NativeBridge.syncKeyBindings(_config);
+    // Overlay-Engine im Dienst (HA-Verbindung, Tuerglocke) uebernimmt die Aenderungen sofort.
+    await NativeBridge.reloadOverlayConfig();
     _ha.configure(_config.haUrl, _config.token, allowBadCertificates: _config.allowBadCertificates);
+    if (mounted) setState(() {});
   }
 
   void _snack(String text) =>
@@ -186,28 +190,67 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: panelBackground,
-        title: const Row(children: [
-          Icon(Icons.home_rounded, color: brandGreen),
-          SizedBox(width: 12),
-          Text('Home Control'),
-        ]),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _serviceSection(),
-              _haSection(),
-              _panelsSection(),
-              _layoutSection(),
+    Widget tab(Widget child) => Center(
+          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 900), child: child),
+        );
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: panelBackground,
+          title: const Row(children: [
+            Icon(Icons.home_rounded, color: brandGreen),
+            SizedBox(width: 12),
+            Text('Home Control'),
+          ]),
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.dashboard_customize), text: 'Panels'),
+              Tab(icon: Icon(Icons.notifications_active), text: 'Türglocke'),
+              Tab(icon: Icon(Icons.hub), text: 'Verbindung'),
             ],
           ),
         ),
+        body: TabBarView(children: [
+          tab(ListView(padding: const EdgeInsets.all(16), children: [_panelsSection(), _layoutSection()])),
+          tab(DoorbellSettings(ha: _ha, config: _config, onChanged: _save)),
+          tab(ListView(padding: const EdgeInsets.all(16), children: [_serviceSection(), _haSection()])),
+        ]),
+        bottomNavigationBar: _statusBar(),
+      ),
+    );
+  }
+
+  /// Immer sichtbar: Dienst, Home Assistant, Tuerglocke.
+  Widget _statusBar() {
+    Widget item(bool ok, IconData icon, String text) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 18, color: ok ? brandGreen : Colors.redAccent),
+            const SizedBox(width: 6),
+            Text(text, style: TextStyle(fontSize: 13, color: ok ? Colors.white70 : Colors.redAccent)),
+          ]),
+        );
+    final haText = switch (_ha.status) {
+      HaStatus.connected => 'Home Assistant verbunden',
+      HaStatus.connecting => 'Home Assistant: verbinde…',
+      HaStatus.authFailed => 'Home Assistant: Token ungültig',
+      HaStatus.disconnected => 'Home Assistant getrennt',
+      HaStatus.notConfigured => 'Home Assistant nicht eingerichtet',
+    };
+    final d = _config.doorbell;
+    return Container(
+      color: panelBackground,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: SafeArea(
+        top: false,
+        child: Wrap(alignment: WrapAlignment.center, runSpacing: 6, children: [
+          item(_serviceOn, Icons.settings_remote, _serviceOn ? 'Dienst läuft' : 'Dienst aus'),
+          item(_autoEnable, Icons.restart_alt, _autoEnable ? 'Autostart abgesichert' : 'Autostart fehlt'),
+          item(_ha.status == HaStatus.connected, Icons.hub, haText),
+          item(d.isRegistered, Icons.notifications_active,
+              d.isRegistered ? 'Türglocke angemeldet' : 'Türglocke nicht angemeldet'),
+        ]),
       ),
     );
   }

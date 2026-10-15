@@ -3,6 +3,7 @@ package org.lotzapp.home_control
 import android.content.Intent
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -74,6 +75,26 @@ class MainActivity : FlutterActivity() {
                         service?.showOverlay(mapOf("mode" to "panel", "panelIndex" to (call.argument<Int>("panelIndex") ?: 0)))
                         result.success(service != null)
                     }
+
+                    "reloadOverlayConfig" -> {
+                        PanelAccessibilityService.instance?.reloadConfig()
+                        result.success(null)
+                    }
+
+                    "testDoorbell" -> {
+                        val service = PanelAccessibilityService.instance
+                        service?.testDoorbell()
+                        result.success(service != null)
+                    }
+
+                    "deviceInfo" -> result.success(
+                        mapOf(
+                            "manufacturer" to Build.MANUFACTURER,
+                            "model" to Build.MODEL,
+                            "osVersion" to Build.VERSION.RELEASE,
+                            "appVersion" to packageManager.getPackageInfo(packageName, 0).versionName,
+                        )
+                    )
 
                     "discoverHomeAssistant" -> {
                         val timeout = call.argument<Int>("timeoutMs") ?: 4000

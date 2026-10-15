@@ -46,6 +46,15 @@ class NativeBridge {
   static Future<bool> showOverlay({int panelIndex = 0}) async =>
       await _ch.invokeMethod<bool>('showOverlay', {'panelIndex': panelIndex}) ?? false;
 
+  /// Overlay-Engine im Dienst laedt die Konfiguration neu.
+  static Future<void> reloadOverlayConfig() => _ch.invokeMethod('reloadOverlayConfig');
+
+  /// Tuerglocke lokal testen (ohne Home Assistant).
+  static Future<bool> testDoorbell() async => await _ch.invokeMethod<bool>('testDoorbell') ?? false;
+
+  static Future<Map<String, String>> deviceInfo() async =>
+      (await _ch.invokeMethod<Map>('deviceInfo') ?? {}).map((k, v) => MapEntry('$k', '${v ?? ''}'));
+
   /// mDNS-Suche nach `_home-assistant._tcp` (Android NsdManager).
   static Future<List<Map<dynamic, dynamic>>> discoverHomeAssistant({int timeoutMs = 4000}) async {
     final list = await _ch.invokeMethod<List>('discoverHomeAssistant', {'timeoutMs': timeoutMs});

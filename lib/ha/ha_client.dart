@@ -31,6 +31,53 @@ class HaClient extends ChangeNotifier {
   String? error;
   String? haVersion;
 
+  // Lokaler Push-Kanal der mobile_app-Integration (Tuerglocke).
+  String? _pushWebhook;
+  int? _pushSubId;
+  final _notifications = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Benachrichtigungen aus `notify.mobile_app_…` ({message, title, data}).
+  Stream<Map<String, dynamic>> get notifications => _notifications.stream;
+
+  /// Push-Kanal aktiv (Tuerglocke empfangsbereit)?
+  bool pushActive = false;
+  String? pushError;
+
+  /// Webhook der mobile_app-Registrierung setzen (null = Tuerglocke aus).
+  void setPushWebhook(String? webhookId) {
+    if (webhookId == _pushWebhook) return;
+    _pushWebhook = webhookId;
+    pushActive = false;
+    pushError = null;
+    if (_pushSubId != null && _ws != null) {
+      final old = _pushSubId!;
+      _pushSubId = null;
+      _send({'type': 'unsubscribe_events', 'subscription': old}).catchError((_) {});
+    }
+    if (status == HaStatus.connected) _subscribePush();
+    notifyListeners();
+  }
+
+  Future<void> _subscribePush() async {
+    final hook = _pushWebhook;
+    if (hook == null || _ws == null) return;
+    final id = _nextId; // _send vergibt genau diese ID
+    _pushSubId = id;
+    try {
+      await _send({'type': 'mobile_app/push_notification_channel', 'webhook_id': hook, 'support_confirm': false});
+      pushActive = true;
+      pushError = null;
+    } catch (e) {
+      pushActive = false;
+      pushError = '$e';
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Alle HA-Dienste (fuer die Suche nach dem eigenen notify-Dienst).
+  Future<Map<String, dynamic>> getServices() async =>
+      ((await _send({'type': 'get_services'})) as Map).cast<String, dynamic>();
+
   /// Setzt die Zugangsdaten; verbindet nur neu, wenn sich etwas geaendert hat.
   void configure(String url, String token, {bool allowBadCertificates = false}) {
     final normalized = normalizeUrl(url);
@@ -122,6 +169,9 @@ class HaClient extends ChangeNotifier {
         }
       case 'pong':
         _pending.remove(msg['id'])?.complete(null);
+      case 'event' when msg['id'] == _pushSubId && _pushSubId != null:
+        final ev = msg['event'];
+        if (ev is Map) _notifications.add(ev.cast<String, dynamic>());
       case 'event':
         final data = (msg['event'] as Map?)?['data'] as Map?;
         if (data == null) return;
@@ -147,6 +197,7 @@ class HaClient extends ChangeNotifier {
           return MapEntry(e.entityId, e);
         }));
       _setStatus(HaStatus.connected);
+      unawaited(_subscribePush());
       _pingTimer?.cancel();
       _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) => _ping());
     } catch (e) {
@@ -186,6 +237,8 @@ class HaClient extends ChangeNotifier {
   }
 
   void _onClosed() {
+    _pushSubId = null;
+    pushActive = false;
     _pingTimer?.cancel();
     _sub?.cancel();
     _sub = null;
@@ -221,6 +274,7 @@ class HaClient extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _close();
+    _notifications.close();
     super.dispose();
   }
 }

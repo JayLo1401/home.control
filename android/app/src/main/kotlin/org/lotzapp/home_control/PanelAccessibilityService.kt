@@ -92,6 +92,24 @@ class PanelAccessibilityService : AccessibilityService() {
                     hideOverlay()
                     result.success(null)
                 }
+                // Flutter oeffnet das Overlay selbst (z. B. Tuerglocke aus Home Assistant).
+                "open" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    showOverlay((call.arguments as? Map<String, Any>) ?: emptyMap())
+                    result.success(null)
+                }
+                "playChime" -> {
+                    Chime.play(
+                        this,
+                        times = call.argument<Int>("times") ?: 1,
+                        volume = (call.argument<Double>("volume") ?: 1.0).toFloat()
+                    )
+                    result.success(null)
+                }
+                "stopChime" -> {
+                    Chime.stop(getSystemService(android.media.AudioManager::class.java))
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -220,6 +238,16 @@ class PanelAccessibilityService : AccessibilityService() {
             e.lifecycleChannel.appIsResumed()
         }
         channel?.invokeMethod("show", args)
+    }
+
+    /** Einstellungen wurden in der App geaendert -> Overlay-Engine laedt neu (HA-Verbindung, Tuerglocke). */
+    fun reloadConfig() {
+        channel?.invokeMethod("reload", null)
+    }
+
+    /** Test aus der App: Tuerglocke lokal ausloesen (ohne Home Assistant). */
+    fun testDoorbell() {
+        channel?.invokeMethod("testDoorbell", null)
     }
 
     fun hideOverlay() {

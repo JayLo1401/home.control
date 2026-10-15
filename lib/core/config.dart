@@ -127,6 +127,59 @@ class PanelConfig {
       );
 }
 
+/// Tuerglocke: Registrierung als mobile_app-Geraet in Home Assistant.
+class DoorbellConfig {
+  /// Webhook der Registrierung (null = nicht angemeldet).
+  String? webhookId;
+
+  /// Stabile Geraete-ID fuer die Registrierung.
+  String? deviceId;
+  String deviceName;
+
+  /// z. B. "mobile_app_home_control_mitv" (Dienst in der Domain notify).
+  String? notifyService;
+
+  bool chime;
+  int chimeRepeat;
+  int volumePercent;
+  int durationSeconds;
+
+  DoorbellConfig({
+    this.webhookId,
+    this.deviceId,
+    this.deviceName = '',
+    this.notifyService,
+    this.chime = true,
+    this.chimeRepeat = 1,
+    this.volumePercent = 100,
+    this.durationSeconds = 30,
+  });
+
+  bool get isRegistered => webhookId != null;
+
+  Map<String, dynamic> toJson() => {
+        'webhookId': ?webhookId,
+        'deviceId': ?deviceId,
+        'deviceName': deviceName,
+        'notifyService': ?notifyService,
+        'chime': chime,
+        'chimeRepeat': chimeRepeat,
+        'volumePercent': volumePercent,
+        'durationSeconds': durationSeconds,
+      };
+
+  factory DoorbellConfig.fromJson(Map<String, dynamic> j) => DoorbellConfig(
+        webhookId: j['webhookId'] as String?,
+        deviceId: j['deviceId'] as String?,
+        deviceName: j['deviceName'] as String? ?? '',
+        notifyService: j['notifyService'] as String?,
+        chime: j['chime'] as bool? ?? true,
+        chimeRepeat: j['chimeRepeat'] as int? ?? 1,
+        volumePercent: j['volumePercent'] as int? ?? 100,
+        durationSeconds: j['durationSeconds'] as int? ?? 30,
+      );
+}
+
 /// App-Konfiguration. Wird von App und Overlay-Engine gemeinsam genutzt
 /// (beide laufen im selben Prozess, deshalb vor jedem Lesen `reload()`).
 class AppConfig {
@@ -135,6 +188,7 @@ class AppConfig {
   bool allowBadCertificates;
   List<PanelConfig> panels;
   Map<String, EntityOverride> overrides;
+  DoorbellConfig doorbell;
   int columns;
   int panelPercent;
   int autoCloseSeconds;
@@ -145,11 +199,13 @@ class AppConfig {
     this.allowBadCertificates = false,
     List<PanelConfig>? panels,
     Map<String, EntityOverride>? overrides,
+    DoorbellConfig? doorbell,
     this.columns = 4,
     this.panelPercent = 80,
     this.autoCloseSeconds = 30,
   })  : panels = panels ?? [],
-        overrides = overrides ?? {};
+        overrides = overrides ?? {},
+        doorbell = doorbell ?? DoorbellConfig();
 
   /// Setzt Name/Symbol; leere Werte entfernen den Eintrag.
   void setOverride(String entityId, {String? name, String? icon}) {
@@ -188,7 +244,11 @@ class AppConfig {
       }
     }
     final overridesJson = p.getString('overrides');
+    final doorbellJson = p.getString('doorbell');
     return AppConfig(
+      doorbell: doorbellJson == null
+          ? null
+          : DoorbellConfig.fromJson((jsonDecode(doorbellJson) as Map).cast<String, dynamic>()),
       haUrl: p.getString('ha_url') ?? '',
       token: p.getString('ha_token') ?? '',
       allowBadCertificates: p.getBool('ha_insecure') ?? false,
@@ -212,6 +272,7 @@ class AppConfig {
     await p.setBool('ha_insecure', allowBadCertificates);
     await p.setString('panels', jsonEncode([for (final x in panels) x.toJson()]));
     await p.remove('entities');
+    await p.setString('doorbell', jsonEncode(doorbell.toJson()));
     await p.setString('overrides', jsonEncode({for (final e in overrides.entries) e.key: e.value.toJson()}));
     await p.setInt('columns', columns);
     await p.setInt('panel_percent', panelPercent);
