@@ -66,26 +66,54 @@ light.huette
     expect(longPressVerb(const HaEntity('scene.kino', 'unknown', {}), 'toggle'), 'ausgeführt');
   });
 
-  testWidgets('Gruppenkachel zeigt Sensorwert und was an ist', (tester) async {
+  HaClient haWithStates() {
     final ha = HaClient();
     ha.states
       ..['sensor.temp'] = const HaEntity('sensor.temp', '35', {'unit_of_measurement': '°C'})
-      ..['switch.pumpe'] = const HaEntity('switch.pumpe', 'on', {'friendly_name': 'Pumpe'});
-    await tester.pumpWidget(MaterialApp(
+      ..['switch.pumpe'] = const HaEntity('switch.pumpe', 'on', {'friendly_name': 'Whirlpool Pumpe Massagedüsen'})
+      ..['light.licht'] = const HaEntity('light.licht', 'off', {'friendly_name': 'Licht'})
+      ..['light.lose'] = const HaEntity('light.lose', 'off', {'friendly_name': 'Wohnzimmer'});
+    return ha;
+  }
+
+  Widget panelApp(HaClient ha, int columns, GlobalKey<QuickPanelState> key) {
+    final config = AppConfig(haUrl: 'http://x', token: 't', columns: columns, autoCloseSeconds: 0)
+      ..panels = [
+        PanelConfig('Garten', items: [
+          EntityItem('light.lose'),
+          GroupItem('Whirlpool', ['switch.pumpe', 'sensor.temp', 'light.licht']),
+        ]),
+      ];
+    return MaterialApp(
       theme: buildTvTheme(),
-      home: SizedBox(
-        width: 300,
-        height: 190,
-        child: GroupTile(
-          group: GroupItem('Whirlpool', ['switch.pumpe', 'sensor.temp']),
-          ha: ha,
-          selected: false,
-          scale: 1,
-        ),
-      ),
-    ));
+      home: Material(child: QuickPanel(key: key, ha: ha, config: config, panel: config.panels.first, onClose: () {})),
+    );
+  }
+
+  testWidgets('Gruppe als Ueberschrift mit Sensorwert, Sensor ohne eigene Kachel', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final key = GlobalKey<QuickPanelState>();
+    await tester.pumpWidget(panelApp(haWithStates(), 4, key));
     expect(find.text('Whirlpool'), findsOneWidget);
     expect(find.text('35 °C'), findsOneWidget);
-    expect(find.text('An: Pumpe'), findsOneWidget);
+    expect(find.byType(EntityTile), findsNWidgets(3)); // lose Lampe + Pumpe + Licht
+
+    // Runter springt von der losen Kachel in die Gruppe.
+    key.currentState!.handleKey(PanelKey.down);
+    await tester.pump();
+    final tiles = tester.widgetList<EntityTile>(find.byType(EntityTile)).toList();
+    expect(tiles.where((t) => t.selected).single.id, 'switch.pumpe');
   });
+
+  for (final cols in [2, 4, 6, 8]) {
+    testWidgets('Kein Ueberlauf bei $cols Spalten', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(panelApp(haWithStates(), cols, GlobalKey()));
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

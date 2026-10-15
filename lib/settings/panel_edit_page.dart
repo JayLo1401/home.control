@@ -374,8 +374,8 @@ class _GroupEditPageState extends State<GroupEditPage> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Sensoren (z. B. Temperatur) werden direkt auf der Gruppenkachel angezeigt, '
-                'z. B. „Whirlpool · 35 °C“. OK auf der Kachel öffnet die Gruppe.',
+                'Die Gruppe erscheint im Panel als Überschrift mit den Kacheln darunter. '
+                'Sensoren (z. B. Temperatur) stehen als Wert in der Überschrift, z. B. „Whirlpool  35 °C“.',
                 style: TextStyle(color: Colors.white54),
               ),
             ]),
