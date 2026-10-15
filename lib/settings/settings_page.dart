@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config.dart';
 import '../core/native_bridge.dart';
@@ -50,6 +51,35 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _rebuild() {
     if (mounted) setState(() {});
+    _migrateGroupSensors();
+  }
+
+  bool _configLoaded = false;
+  bool _groupSensorsMigrated = false;
+
+  /// Einmalig: Sensoren aus Gruppen in die Ueberschriftsfelder uebernehmen.
+  /// Braucht geladene Konfiguration UND HA-Zustaende (device_class).
+  Future<void> _migrateGroupSensors() async {
+    if (_groupSensorsMigrated || !_configLoaded || _ha.status != HaStatus.connected) return;
+    _groupSensorsMigrated = true;
+    const flag = 'migrated_group_sensors_v2';
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(flag) ?? false) return;
+    final changed = _config.assignGroupSensors((id) {
+      final e = _ha.states[id];
+      if (e == null || e.domain != 'sensor') return null;
+      return switch ((e.deviceClass, e.unit)) {
+        ('temperature', _) || (_, '°C') => 'temperature',
+        ('humidity', _) => 'humidity',
+        ('power', _) || (_, 'W') => 'power',
+        _ => null,
+      };
+    });
+    await prefs.setBool(flag, true);
+    if (changed) {
+      await _save();
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _load({bool reconnect = false}) async {
@@ -68,10 +98,12 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     setState(() {
       _config = c;
+      _configLoaded = true;
       _urlCtrl.text = c.haUrl;
       _tokenCtrl.text = c.token;
     });
     if (reconnect) _ha.configure(c.haUrl, c.token, allowBadCertificates: c.allowBadCertificates);
+    _migrateGroupSensors();
   }
 
   Future<void> _refreshService() async {

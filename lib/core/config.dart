@@ -7,7 +7,10 @@ sealed class PanelItem {
   Map<String, dynamic> toJson();
 
   static PanelItem fromJson(Map<String, dynamic> j) => j.containsKey('group')
-      ? GroupItem(j['group'] as String, [...?(j['entities'] as List?)?.cast<String>()])
+      ? (GroupItem(j['group'] as String, [...?(j['entities'] as List?)?.cast<String>()])
+        ..temperature = j['temperature'] as String?
+        ..humidity = j['humidity'] as String?
+        ..power = j['power'] as String?)
       : EntityItem(j['entity'] as String);
 }
 
@@ -19,16 +22,31 @@ class EntityItem extends PanelItem {
   Map<String, dynamic> toJson() => {'entity': entityId};
 }
 
-/// Gruppe (z. B. "Whirlpool"): Sensorwerte werden auf der Kachel angezeigt,
-/// OK oeffnet die Gruppe.
+/// Gruppe (z. B. "Whirlpool"): Ueberschrift mit Temperatur, Luftfeuchte und
+/// Leistung, darunter die Kacheln der Entitaeten.
 class GroupItem extends PanelItem {
   String name;
   List<String> entities;
+
+  /// Sensoren fuer die Ueberschrift (Entitaets-IDs, optional).
+  String? temperature;
+  String? humidity;
+  String? power;
+
   GroupItem(this.name, [List<String>? entities]) : entities = entities ?? [];
 
   @override
-  Map<String, dynamic> toJson() => {'group': name, 'entities': entities};
+  Map<String, dynamic> toJson() => {
+        'group': name,
+        'entities': entities,
+        'temperature': ?temperature,
+        'humidity': ?humidity,
+        'power': ?power,
+      };
 }
+
+/// Schluesselwoerter fuer die Gruppen-Sensoren im Textformat.
+const groupSensorKeys = ('temperatur', 'feuchte', 'leistung');
 
 /// Eigener Name / eigenes Symbol einer Entitaet (gilt in allen Panels).
 class EntityOverride {
@@ -211,6 +229,7 @@ class AppConfig {
   //   scene.kino
   //
   // "== Name" beginnt ein Panel, "-- Name" eine Gruppe, "--" allein beendet die Gruppe.
+  // In einer Gruppe: "temperatur: sensor.x", "feuchte: sensor.y", "leistung: sensor.z" (Ueberschrift).
   // Optional pro Entitaet: "switch.pumpe | Pumpe | mdi:pump" (eigener Name / Symbol).
   // Taste und Lang-Druecken-Aktion werden ueber den Panelnamen beibehalten.
 
@@ -229,6 +248,9 @@ class AppConfig {
             entity(entityId);
           case GroupItem(:final name, :final entities):
             b.writeln('-- $name');
+            if (i.temperature != null) b.writeln('${groupSensorKeys.$1}: ${i.temperature}');
+            if (i.humidity != null) b.writeln('${groupSensorKeys.$2}: ${i.humidity}');
+            if (i.power != null) b.writeln('${groupSensorKeys.$3}: ${i.power}');
             entities.forEach(entity);
             b.writeln('--');
         }
@@ -261,6 +283,8 @@ class AppConfig {
           group = GroupItem(name);
           panel.items.add(group);
         }
+      } else if (group != null && _groupSensor(group, line)) {
+        // "temperatur: sensor.x" usw. – erledigt
       } else if (line.contains('.')) {
         final parts = line.split('|').map((s) => s.trim()).toList();
         final id = parts.first.split(RegExp(r'\s')).first;
@@ -276,6 +300,49 @@ class AppConfig {
       }
     }
     panels = result;
+  }
+
+  /// Uebernimmt Temperatur-/Feuchte-/Leistungssensoren aus den Gruppeneintraegen
+  /// in die freien Ueberschriftsfelder. [classify] liefert 'temperature',
+  /// 'humidity', 'power' oder null. Gibt zurueck, ob etwas geaendert wurde.
+  bool assignGroupSensors(String? Function(String entityId) classify) {
+    var changed = false;
+    for (final p in panels) {
+      for (final g in p.items.whereType<GroupItem>()) {
+        for (final id in [...g.entities]) {
+          final kind = classify(id);
+          if (kind == 'temperature' && g.temperature == null) {
+            g.temperature = id;
+          } else if (kind == 'humidity' && g.humidity == null) {
+            g.humidity = id;
+          } else if (kind == 'power' && g.power == null) {
+            g.power = id;
+          } else {
+            continue;
+          }
+          g.entities.remove(id);
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  static bool _groupSensor(GroupItem g, String line) {
+    final m = RegExp(r'^(\w+)\s*:\s*(\S+)$').firstMatch(line);
+    if (m == null) return false;
+    final id = m[2]!;
+    switch (m[1]!.toLowerCase()) {
+      case final k when k == groupSensorKeys.$1:
+        g.temperature = id;
+      case final k when k == groupSensorKeys.$2:
+        g.humidity = id;
+      case final k when k == groupSensorKeys.$3:
+        g.power = id;
+      default:
+        return false;
+    }
+    return true;
   }
 
   static PanelConfig _addDefaultPanel(List<PanelConfig> list) {

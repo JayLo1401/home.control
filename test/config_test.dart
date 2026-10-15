@@ -70,6 +70,39 @@ light.huette
     expect(entityName(c, 'switch.pumpe', e), 'Whirlpool Pumpe');
   });
 
+  test('Gruppen-Sensoren im Textformat und JSON', () {
+    final c = AppConfig()
+      ..panelsFromText('== Garten\n-- Whirlpool\ntemperatur: sensor.wp_temp\nleistung: sensor.wp_watt\n'
+          'switch.pumpe\n--');
+    final g = c.panels.first.items.single as GroupItem;
+    expect((g.temperature, g.humidity, g.power), ('sensor.wp_temp', null, 'sensor.wp_watt'));
+    expect(g.entities, ['switch.pumpe']);
+    expect(c.panelsToText(), contains('temperatur: sensor.wp_temp'));
+    final back = PanelItem.fromJson(g.toJson()) as GroupItem;
+    expect(back.power, 'sensor.wp_watt');
+  });
+
+  test('Sensoren aus Gruppen in die Ueberschrift uebernehmen', () {
+    final c = AppConfig()
+      ..panelsFromText('== P\n-- Whirlpool\nswitch.pumpe\nsensor.t1\nsensor.t2\nsensor.uv\nsensor.w\n--');
+    final kinds = {'sensor.t1': 'temperature', 'sensor.t2': 'temperature', 'sensor.w': 'power'};
+    expect(c.assignGroupSensors((id) => kinds[id]), isTrue);
+    final g = c.panels.first.items.single as GroupItem;
+    expect((g.temperature, g.humidity, g.power), ('sensor.t1', null, 'sensor.w'));
+    // zweiter Temperatursensor und UV bleiben Kacheln
+    expect(g.entities, ['switch.pumpe', 'sensor.t2', 'sensor.uv']);
+  });
+
+  test('Zahlen mit deutschem Komma', () {
+    expect(formatNumber('21.52'), '21,5');
+    expect(formatNumber('21.0'), '21');
+    expect(formatNumber('0.6624'), '0,7');
+    expect(formatNumber('1234.5'), '1235');
+    expect(formatNumber('21.52', decimals: 1), '21,5');
+    expect(formatNumber('45.4', decimals: 0), '45');
+    expect(formatNumber('an'), isNull);
+  });
+
   test('JSON-Roundtrip', () {
     final c = AppConfig()..panelsFromText(text);
     c.panels.first.longPress = LongPressAction('light.wohnzimmer', holdMs: 3000);
@@ -104,7 +137,7 @@ light.huette
       ..panels = [
         PanelConfig('Garten', items: [
           EntityItem('light.lose'),
-          GroupItem('Whirlpool', ['switch.pumpe', 'sensor.temp', 'light.licht']),
+          GroupItem('Whirlpool', ['switch.pumpe', 'light.licht'])..temperature = 'sensor.temp',
         ]),
       ];
     return MaterialApp(
@@ -113,14 +146,14 @@ light.huette
     );
   }
 
-  testWidgets('Gruppe als Ueberschrift mit Sensorwert, Sensor ohne eigene Kachel', (tester) async {
+  testWidgets('Gruppe als Ueberschrift mit Temperatur, Kacheln darunter', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     final key = GlobalKey<QuickPanelState>();
     await tester.pumpWidget(panelApp(haWithStates(), 4, key));
     expect(find.text('Whirlpool'), findsOneWidget);
-    expect(find.text('35 °C'), findsOneWidget);
+    expect(find.text('35,0 °C'), findsOneWidget);
     expect(find.byType(EntityTile), findsNWidgets(3)); // lose Lampe + Pumpe + Licht
 
     // Runter springt von der losen Kachel in die Gruppe.

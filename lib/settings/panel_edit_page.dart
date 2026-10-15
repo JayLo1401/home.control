@@ -360,6 +360,44 @@ class _GroupEditPageState extends State<GroupEditPage> {
     widget.onChanged();
   }
 
+  /// Ein Sensorfeld der Ueberschrift: anzeigen, waehlen, entfernen.
+  Widget _sensorSlot(String label, IconData icon, String? current, String deviceClass, List<String> units,
+      void Function(String?) set) {
+    final e = current == null ? null : widget.ha.states[current];
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: accentAmber),
+      title: Text(label),
+      subtitle: Text(current == null
+          ? 'nicht zugeordnet'
+          : '${entityName(widget.config, current, e)} · ${e == null ? current : stateLabel(e)}'),
+      onTap: () => _pickSensor(label, deviceClass, units, set),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(
+          onPressed: () => _pickSensor(label, deviceClass, units, set),
+          icon: Icon(current == null ? Icons.add : Icons.edit),
+        ),
+        if (current != null) IconButton(onPressed: () => _change(() => set(null)), icon: const Icon(Icons.close)),
+      ]),
+    );
+  }
+
+  Future<void> _pickSensor(String label, String deviceClass, List<String> units, void Function(String?) set) async {
+    if (widget.ha.status != HaStatus.connected) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erst mit Home Assistant verbinden.')));
+      return;
+    }
+    final result = await Navigator.of(context).push<List<String>>(MaterialPageRoute(
+      builder: (_) => EntityPickerPage(
+        ha: widget.ha,
+        single: true,
+        title: '$label für „${widget.group.name}“',
+        filter: (e) => e.domain == 'sensor' && (e.deviceClass == deviceClass || units.contains(e.unit)),
+      ),
+    ));
+    if (result != null && result.isNotEmpty) _change(() => set(result.first));
+  }
+
   Future<void> _addEntities() async {
     if (widget.ha.status != HaStatus.connected) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erst mit Home Assistant verbinden.')));
@@ -389,10 +427,17 @@ class _GroupEditPageState extends State<GroupEditPage> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Die Gruppe erscheint im Panel als Überschrift mit den Kacheln darunter. '
-                'Sensoren (z. B. Temperatur) stehen als Wert in der Überschrift, z. B. „Whirlpool  35 °C“.',
+                'Die Gruppe erscheint im Panel als Überschrift mit den Kacheln darunter.',
                 style: TextStyle(color: Colors.white54),
               ),
+            ]),
+            SectionCard(title: 'Werte in der Überschrift', icon: Icons.sensors, children: [
+              _sensorSlot('Temperatur', Icons.thermostat, widget.group.temperature, 'temperature', const ['°C', '°F'],
+                  (v) => widget.group.temperature = v),
+              _sensorSlot('Luftfeuchtigkeit', Icons.water_drop, widget.group.humidity, 'humidity', const ['%'],
+                  (v) => widget.group.humidity = v),
+              _sensorSlot('Stromverbrauch', Icons.bolt, widget.group.power, 'power', const ['W', 'kW'],
+                  (v) => widget.group.power = v),
             ]),
             SectionCard(title: 'Entitäten', icon: Icons.list, children: [
               Align(

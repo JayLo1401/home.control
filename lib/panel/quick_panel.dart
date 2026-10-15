@@ -12,12 +12,14 @@ import '../ha/ha_entity.dart';
 enum PanelKey { up, down, left, right, select }
 
 /// Abschnitt im Panel: lose Entitaeten (ohne Ueberschrift) oder eine Gruppe.
-/// Sensoren einer Gruppe erscheinen als Wert in der Ueberschrift, nicht als Kachel.
 class _Section {
   final GroupItem? group;
   final List<String> tiles;
   _Section(this.group, this.tiles);
 }
+
+/// Seitenverhaeltnis der (flachen) Kacheln.
+const _tileAspect = 2.5;
 
 /// Das Schnellzugriffs-Panel. Wird im Overlay (Tasten kommen vom Dienst) und
 /// als Vorschau in der App (Tasten kommen vom Flutter-Fokus) verwendet.
@@ -59,18 +61,10 @@ class QuickPanelState extends State<QuickPanel> {
           loose.tiles.add(entityId);
         case GroupItem():
           loose = null;
-          result.add(_Section(item, [
-            for (final id in item.entities)
-              if (!_isSensorId(id)) id,
-          ]));
+          result.add(_Section(item, item.entities));
       }
     }
     return result;
-  }
-
-  bool _isSensorId(String id) {
-    final e = widget.ha.states[id];
-    return e != null ? isSensor(e) : id.startsWith('sensor.') || id.startsWith('weather.');
   }
 
   /// Kacheln als Zeilen (flache Indizes) – fuer Hoch/Runter ueber Abschnitte hinweg.
@@ -218,19 +212,22 @@ class QuickPanelState extends State<QuickPanel> {
                 return Container(
                   decoration: BoxDecoration(
                     color: panelBackground.withValues(alpha: 0.96),
-                    borderRadius: BorderRadius.circular(24 * scale),
+                    borderRadius: BorderRadius.circular(20 * scale),
                     border: Border.all(color: brandGreen.withValues(alpha: 0.6), width: 2),
                     boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 40)],
                   ),
-                  padding: EdgeInsets.all(20 * scale),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  padding: EdgeInsets.fromLTRB(14 * scale, 10 * scale, 14 * scale, 10 * scale),
+                  child: Stack(
                     children: [
-                      _header(context, scale),
-                      SizedBox(height: 16 * scale),
-                      Expanded(child: _body(context, scale)),
-                      SizedBox(height: 12 * scale),
-                      _footer(scale),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _header(context, scale),
+                          SizedBox(height: 6 * scale),
+                          Expanded(child: _body(context, scale)),
+                        ],
+                      ),
+                      _messageToast(scale),
                     ],
                   ),
                 );
@@ -242,11 +239,12 @@ class QuickPanelState extends State<QuickPanel> {
     );
   }
 
+  /// Schmale Kopfzeile: Panelname, Verbindung, Uhrzeit.
   Widget _header(BuildContext context, double s) {
     final now = DateTime.now();
     final time = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     final (color, text) = switch (widget.ha.status) {
-      HaStatus.connected => (brandGreen, 'Verbunden'),
+      HaStatus.connected => (brandGreen, null),
       HaStatus.connecting => (accentAmber, 'Verbinde…'),
       HaStatus.authFailed => (Colors.redAccent, 'Token ungültig'),
       HaStatus.notConfigured => (Colors.grey, 'Nicht eingerichtet'),
@@ -254,29 +252,57 @@ class QuickPanelState extends State<QuickPanel> {
     };
     return Row(
       children: [
-        Icon(Icons.home_rounded, color: brandGreen, size: 32 * s),
-        SizedBox(width: 12 * s),
+        Icon(Icons.home_rounded, color: brandGreen, size: 20 * s),
+        SizedBox(width: 8 * s),
         Flexible(
           child: Text(
             widget.panel?.name ?? 'Home Control',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 24 * s, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 16 * s, fontWeight: FontWeight.w600, color: Colors.white70),
           ),
         ),
         const Spacer(),
         Container(
-          width: 10 * s,
-          height: 10 * s,
+          width: 8 * s,
+          height: 8 * s,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        SizedBox(width: 8 * s),
-        Text(text, style: TextStyle(fontSize: 15 * s, color: Colors.white70)),
-        SizedBox(width: 24 * s),
-        Text(time, style: TextStyle(fontSize: 24 * s, fontWeight: FontWeight.w300)),
+        if (text != null) ...[
+          SizedBox(width: 6 * s),
+          Text(text, style: TextStyle(fontSize: 13 * s, color: Colors.white70)),
+        ],
+        SizedBox(width: 14 * s),
+        Text(time, style: TextStyle(fontSize: 16 * s, color: Colors.white70)),
       ],
     );
   }
+
+  /// Kurze Meldung (z. B. Fehler) – nur bei Bedarf eingeblendet, braucht keinen festen Platz.
+  Widget _messageToast(double s) => Positioned(
+        left: 0,
+        right: 0,
+        bottom: 4 * s,
+        child: IgnorePointer(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: _message == null
+                ? const SizedBox.shrink()
+                : Center(
+                    key: ValueKey(_message),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 16 * s, vertical: 8 * s),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(20 * s),
+                        border: Border.all(color: accentAmber),
+                      ),
+                      child: Text(_message!, style: TextStyle(fontSize: 14 * s, color: accentAmber)),
+                    ),
+                  ),
+          ),
+        ),
+      );
 
   Widget _body(BuildContext context, double s) {
     if (!widget.config.isConfigured) {
@@ -289,55 +315,67 @@ class QuickPanelState extends State<QuickPanel> {
     if (sections.isEmpty) {
       return _hint(s, Icons.playlist_add, 'Hier ist noch nichts eingetragen.\nÖffne die App „Home Control“.');
     }
-    final gap = 14 * s;
+    final gap = 10 * s;
+    // Rand innerhalb des Scrollbereichs, damit die vergroesserte Auswahl samt Leuchten nicht abgeschnitten wird.
+    final edge = 8 * s;
     var index = 0;
     final slivers = <Widget>[];
     for (final (si, section) in sections.indexed) {
       if (section.group != null) {
-        slivers.add(SliverToBoxAdapter(
-          child: GroupHeader(group: section.group!, ha: widget.ha, scale: s, first: si == 0),
+        slivers.add(SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: edge),
+          sliver: SliverToBoxAdapter(
+            child: GroupHeader(group: section.group!, ha: widget.ha, scale: s, first: si == 0),
+          ),
         ));
       } else if (si > 0) {
-        slivers.add(SliverToBoxAdapter(child: SizedBox(height: gap)));
+        // Lose Kacheln nach einer Gruppe: eigene (namenlose) Trennlinie,
+        // damit sie nicht wie ein Teil der Gruppe darueber wirken.
+        slivers.add(SliverPadding(
+          padding: EdgeInsets.fromLTRB(edge, 14 * s, edge, 4 * s),
+          sliver: SliverToBoxAdapter(child: Divider(height: 1, thickness: 1.5, color: Colors.white24)),
+        ));
       }
       final start = index;
       index += section.tiles.length;
       if (section.tiles.isEmpty) continue;
-      slivers.add(SliverGrid(
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: _cols,
-          mainAxisSpacing: gap,
-          crossAxisSpacing: gap,
-          childAspectRatio: 1.55,
-        ),
-        delegate: SliverChildBuilderDelegate(
-          childCount: section.tiles.length,
-          (context, k) {
-            final i = start + k;
-            final id = section.tiles[k];
-            return GestureDetector(
-              key: _tileKeys.putIfAbsent(i, GlobalKey.new),
-              onTap: () {
-                setState(() => _selected = i);
-                _restartIdle();
-                _toggleEntity(id);
-              },
-              child: EntityTile(
-                entity: widget.ha.states[id],
-                name: entityName(widget.config, id, widget.ha.states[id]),
-                icon: entityIcon(widget.config, id, widget.ha.states[id]),
-                selected: i == _selected,
-                busy: _busy.contains(id),
-              ),
-            );
-          },
+      slivers.add(SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: edge, vertical: edge / 2),
+        sliver: SliverGrid(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _cols,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+            childAspectRatio: _tileAspect,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            childCount: section.tiles.length,
+            (context, k) {
+              final i = start + k;
+              final id = section.tiles[k];
+              final e = widget.ha.states[id];
+              return GestureDetector(
+                key: _tileKeys.putIfAbsent(i, GlobalKey.new),
+                onTap: () {
+                  setState(() => _selected = i);
+                  _restartIdle();
+                  _toggleEntity(id);
+                },
+                child: EntityTile(
+                  entity: e,
+                  name: entityName(widget.config, id, e),
+                  icon: entityIcon(widget.config, id, e),
+                  selected: i == _selected,
+                  busy: _busy.contains(id),
+                ),
+              );
+            },
+          ),
         ),
       ));
     }
-    return Padding(
-      padding: EdgeInsets.all(8 * s),
-      child: CustomScrollView(slivers: slivers),
-    );
+    slivers.add(SliverToBoxAdapter(child: SizedBox(height: edge)));
+    return CustomScrollView(slivers: slivers);
   }
 
   Widget _hint(double s, IconData icon, String text) => Center(
@@ -350,23 +388,9 @@ class QuickPanelState extends State<QuickPanel> {
           ],
         ),
       );
-
-  Widget _footer(double s) {
-    final style = TextStyle(fontSize: 14 * s, color: Colors.white54);
-    const hint = '◀ ▲ ▼ ▶  auswählen   ·   OK  schalten   ·   Zurück  schließen';
-    return SizedBox(
-      height: 22 * s,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        child: _message != null
-            ? Text(_message!, key: const ValueKey('msg'), style: style.copyWith(color: accentAmber), textAlign: TextAlign.center)
-            : Text(hint, key: const ValueKey('hint'), style: style, textAlign: TextAlign.center),
-      ),
-    );
-  }
 }
 
-/// Gruppenueberschrift: Name und Sensorwerte, z. B. "Whirlpool   35 °C · 40 %".
+/// Gruppenueberschrift: Name + Temperatur, Luftfeuchte, Leistung (soweit zugeordnet).
 class GroupHeader extends StatelessWidget {
   final GroupItem group;
   final HaClient ha;
@@ -375,42 +399,47 @@ class GroupHeader extends StatelessWidget {
 
   const GroupHeader({super.key, required this.group, required this.ha, required this.scale, this.first = false});
 
+  /// Wert eines Sensors fuer die Ueberschrift, `null` wenn nicht gesetzt/verfuegbar.
+  String? _value(String? id, int decimals, String fallbackUnit) {
+    final e = id == null ? null : ha.states[id];
+    if (e == null || e.isUnavailable) return null;
+    final v = formatNumber(e.state, decimals: decimals);
+    if (v == null) return null;
+    return '$v ${e.unit ?? fallbackUnit}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = scale;
     final values = [
-      for (final id in group.entities)
-        if (ha.states[id] case final e? when isSensor(e) && !e.isUnavailable) stateLabel(e),
-    ];
+      (Icons.thermostat, _value(group.temperature, 1, '°C')),
+      (Icons.water_drop, _value(group.humidity, 0, '%')),
+      (Icons.bolt, _value(group.power, 0, 'W')),
+    ].where((v) => v.$2 != null);
+    final valueStyle = TextStyle(fontSize: 17 * s, fontWeight: FontWeight.w400, color: Colors.white);
+
     return Padding(
-      padding: EdgeInsets.only(top: first ? 0 : 22 * s, bottom: 10 * s),
+      padding: EdgeInsets.only(top: first ? 2 * s : 14 * s, bottom: 4 * s),
       child: Container(
-        padding: EdgeInsets.only(bottom: 6 * s),
+        padding: EdgeInsets.only(bottom: 4 * s),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: brandGreen.withValues(alpha: 0.5), width: 1.5)),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
           children: [
             Flexible(
               child: Text(
                 group.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 20 * s, fontWeight: FontWeight.w700, color: brandGreen),
+                style: TextStyle(fontSize: 18 * s, fontWeight: FontWeight.w700, color: brandGreen),
               ),
             ),
-            if (values.isNotEmpty) ...[
-              SizedBox(width: 16 * s),
-              Flexible(
-                child: Text(
-                  values.join('  ·  '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 20 * s, fontWeight: FontWeight.w300, color: Colors.white),
-                ),
-              ),
+            for (final (icon, text) in values) ...[
+              SizedBox(width: 18 * s),
+              Icon(icon, size: 18 * s, color: accentAmber),
+              SizedBox(width: 4 * s),
+              Text(text!, style: valueStyle),
             ],
           ],
         ),
@@ -419,6 +448,8 @@ class GroupHeader extends StatelessWidget {
   }
 }
 
+/// Flache Kachel: Symbol + Name. Zustand ueber die Farbe; reine Anzeige-
+/// Entitaeten (z. B. Sensoren) zeigen zusaetzlich ihren Wert.
 class EntityTile extends StatelessWidget {
   final HaEntity? entity;
   final String name;
@@ -440,59 +471,69 @@ class EntityTile extends StatelessWidget {
     final e = entity;
     final active = e != null && isActive(e);
     final unavailable = e == null || e.isUnavailable;
+    // Zweite Zeile nur fuer Anzeige-Entitaeten und "nicht verfuegbar".
+    final showValue = e == null || primaryAction(e) == null;
     final iconColor = unavailable ? Colors.white24 : (active ? accentAmber : Colors.white70);
     final focus = Theme.of(context).focusColor;
 
     // Schrift/Icon an die Kachelgroesse anpassen (mehr Spalten -> kleinere Kacheln).
     return LayoutBuilder(builder: (context, c) {
-      // 6 = Fokusrahmen oben+unten (skaliert nicht mit)
-      final s = min((c.maxWidth - 6) / 190, (c.maxHeight - 6) / 122).clamp(0.25, 2.0);
+      // 6 = Fokusrahmen (skaliert nicht mit)
+      final s = min((c.maxWidth - 6) / 200, (c.maxHeight - 6) / 74).clamp(0.25, 2.0);
       return AnimatedScale(
         scale: selected ? 1.05 : 1.0,
         duration: const Duration(milliseconds: 120),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: EdgeInsets.all(12 * s),
+          padding: EdgeInsets.symmetric(horizontal: 10 * s, vertical: 6 * s),
           decoration: BoxDecoration(
-            color: active ? Color.lerp(tileBackground, accentAmber, 0.14) : tileBackground,
-            borderRadius: BorderRadius.circular(16 * s),
-            border: Border.all(color: selected ? focus : Colors.white10, width: selected ? 3 : 1),
+            color: active ? Color.lerp(tileBackground, accentAmber, 0.16) : tileBackground,
+            borderRadius: BorderRadius.circular(12 * s),
+            border: Border.all(
+              color: selected ? focus : (active ? accentAmber.withValues(alpha: 0.5) : Colors.white10),
+              width: selected ? 3 : 1,
+            ),
             boxShadow:
-                selected ? [BoxShadow(color: focus.withValues(alpha: 0.5), blurRadius: 14, spreadRadius: 1)] : null,
+                selected ? [BoxShadow(color: focus.withValues(alpha: 0.5), blurRadius: 12, spreadRadius: 1)] : null,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Icon(icon, color: iconColor, size: 32 * s),
-                  const Spacer(),
-                  if (busy)
-                    SizedBox(
-                      width: 18 * s,
-                      height: 18 * s,
-                      child: const CircularProgressIndicator(strokeWidth: 2, color: accentAmber),
+              busy
+                  ? SizedBox(
+                      width: 26 * s,
+                      height: 26 * s,
+                      child: Padding(
+                        padding: EdgeInsets.all(4 * s),
+                        child: const CircularProgressIndicator(strokeWidth: 2, color: accentAmber),
+                      ),
+                    )
+                  : Icon(icon, color: iconColor, size: 26 * s),
+              SizedBox(width: 10 * s),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: showValue ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15 * s,
+                        fontWeight: FontWeight.w600,
+                        color: unavailable ? Colors.white54 : Colors.white,
+                        height: 1.15,
+                      ),
                     ),
-                ],
-              ),
-              const Spacer(),
-              Text(
-                name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 16 * s,
-                  fontWeight: FontWeight.w600,
-                  color: unavailable ? Colors.white54 : Colors.white,
-                  height: 1.15,
+                    if (showValue)
+                      Text(
+                        e == null ? 'Nicht gefunden' : stateLabel(e),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 14 * s, color: unavailable ? Colors.white38 : accentAmber),
+                      ),
+                  ],
                 ),
-              ),
-              SizedBox(height: 3 * s),
-              Text(
-                e == null ? 'Nicht gefunden' : stateLabel(e),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13 * s, color: active ? accentAmber : Colors.white60),
               ),
             ],
           ),

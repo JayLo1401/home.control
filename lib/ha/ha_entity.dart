@@ -167,8 +167,20 @@ String stateLabel(HaEntity e) {
   }
   final label = _stateLabels[e.state];
   if (label != null) return label;
+  final value = formatNumber(e.state) ?? e.state;
   final unit = e.unit;
-  return unit == null ? e.state : '${e.state} $unit';
+  return unit == null ? value : '$value $unit';
+}
+
+/// Zahl mit deutschem Komma: ab 100 ohne, darunter max. 1 Nachkommastelle
+/// (oder genau [decimals]). `null`, wenn [state] keine Zahl ist.
+String? formatNumber(String state, {int? decimals}) {
+  final v = double.tryParse(state);
+  if (v == null) return null;
+  final d = decimals ?? (v.abs() >= 100 ? 0 : 1);
+  var s = v.toStringAsFixed(d);
+  if (decimals == null && s.contains('.')) s = s.replaceFirst(RegExp(r'\.?0+$'), '');
+  return s.replaceAll('.', ',');
 }
 
 IconData iconFor(HaEntity e) {

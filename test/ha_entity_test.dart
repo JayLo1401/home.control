@@ -19,7 +19,7 @@ void main() {
 
   test('Sensoren sind reine Statusanzeige', () {
     expect(primaryAction(e('sensor.temp', '21.5', {'unit_of_measurement': '°C'})), isNull);
-    expect(stateLabel(e('sensor.temp', '21.5', {'unit_of_measurement': '°C'})), '21.5 °C');
+    expect(stateLabel(e('sensor.temp', '21.5', {'unit_of_measurement': '°C'})), '21,5 °C');
   });
 
   test('Nicht verfuegbare Geraete nicht schalten', () {
