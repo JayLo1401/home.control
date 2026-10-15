@@ -46,6 +46,9 @@ class NativeBridge {
   static Future<bool> showOverlay({int panelIndex = 0}) async =>
       await _ch.invokeMethod<bool>('showOverlay', {'panelIndex': panelIndex}) ?? false;
 
+  /// Link im Browser oeffnen; `false`, wenn kein Browser vorhanden ist.
+  static Future<bool> openUrl(String url) async => await _ch.invokeMethod<bool>('openUrl', {'url': url}) ?? false;
+
   /// Overlay-Engine im Dienst laedt die Konfiguration neu.
   static Future<void> reloadOverlayConfig() => _ch.invokeMethod('reloadOverlayConfig');
 

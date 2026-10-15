@@ -76,6 +76,19 @@ class MainActivity : FlutterActivity() {
                         result.success(service != null)
                     }
 
+                    "openUrl" -> {
+                        val ok = try {
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW, android.net.Uri.parse(call.argument<String>("url")))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                            true
+                        } catch (_: Exception) {
+                            false // z. B. kein Browser auf dem TV
+                        }
+                        result.success(ok)
+                    }
+
                     "reloadOverlayConfig" -> {
                         PanelAccessibilityService.instance?.reloadConfig()
                         result.success(null)

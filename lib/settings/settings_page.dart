@@ -11,6 +11,8 @@ import 'panel_edit_page.dart';
 import 'web_setup_server.dart';
 import 'widgets.dart';
 
+const _homepage = 'https://jaycloud.at/homecontrol';
+
 class SettingsPage extends StatefulWidget {
   final HaClient ha;
   const SettingsPage({super.key, required this.ha});
@@ -198,10 +200,22 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: panelBackground,
-          title: const Row(children: [
-            Icon(Icons.home_rounded, color: brandGreen),
-            SizedBox(width: 12),
-            Text('Home Control'),
+          toolbarHeight: 64,
+          title: Row(children: [
+            const Icon(Icons.home_rounded, color: brandGreen, size: 30),
+            const SizedBox(width: 12),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              const Text('Home Control',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20, height: 1.15)),
+              InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () async {
+                  if (!await NativeBridge.openUrl(_homepage)) _snack('Kein Browser gefunden: $_homepage');
+                },
+                child: const Text('Powered by Jay',
+                    style: TextStyle(color: brandGreen, fontWeight: FontWeight.w600, fontSize: 12, height: 1.3)),
+              ),
+            ]),
           ]),
           bottom: const TabBar(
             tabs: [
