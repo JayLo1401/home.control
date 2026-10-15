@@ -4,7 +4,7 @@ import 'dart:math';
 
 import 'ha_client.dart';
 
-/// Registrierung als Geraet der HA-Integration `mobile_app` (wie die Companion-App).
+/// Registrierung als Geraet der HA-Integration `mobile_app`.
 /// HA legt dabei den Dienst `notify.mobile_app_<geraetename>` an; Nachrichten kommen
 /// lokal ueber den WebSocket-Push-Kanal (keine Cloud noetig).
 class MobileAppRegistration {
@@ -118,7 +118,7 @@ class DoorbellMessage {
         _ => null,
       },
       camera: data['camera'] as String?,
-      // wie bei der Companion-App: Nachricht wieder schliessen
+      // Konvention der mobile_app-Benachrichtigungen: Nachricht wieder schliessen
       clear: message == 'clear_notification',
     );
   }

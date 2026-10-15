@@ -211,7 +211,7 @@ class _SettingsPageState extends State<SettingsPage> {
           backgroundColor: panelBackground,
           toolbarHeight: 64,
           title: Row(children: [
-            const Icon(Icons.home_rounded, color: brandGreen, size: 30),
+            Image.asset('assets/logo.png', width: 40, height: 40, filterQuality: FilterQuality.medium),
             const SizedBox(width: 12),
             Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               const Text('Home Control',

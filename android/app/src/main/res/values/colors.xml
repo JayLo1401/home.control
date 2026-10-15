@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#141A22</color>
+    <!-- aus scripts/gen_icons.ps1 (Randfarbe des Logos) -->
+    <color name="ic_launcher_background">#0E1821</color>
 </resources>

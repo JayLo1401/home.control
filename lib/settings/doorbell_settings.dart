@@ -118,7 +118,7 @@ class _DoorbellSettingsState extends State<DoorbellSettings> {
     return ListView(padding: const EdgeInsets.all(16), children: [
       SectionCard(title: 'Anmeldung in Home Assistant', icon: Icons.notifications_active, children: [
         const Text(
-          'Home Control meldet sich wie die Companion-App als Gerät in Home Assistant an. '
+          'Home Control meldet sich über die Integration „mobile_app“ als Gerät in Home Assistant an. '
           'Danach gibt es dort einen eigenen Benachrichtigungsdienst. Ruft eine Automation ihn auf, '
           'erscheint die Meldung mit Gong über allem, was gerade läuft. Die Musik wird dabei nur kurz leiser.',
           style: TextStyle(color: Colors.white54),

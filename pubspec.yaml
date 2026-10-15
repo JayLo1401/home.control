@@ -22,6 +22,7 @@ flutter:
 
   # Material Design Icons (@mdi/font 7.4.47) fuer HA-Symbole "mdi:..."
   assets:
+    - assets/logo.png
     - assets/mdi/names.txt
   fonts:
     - family: MaterialDesignIcons

@@ -12,7 +12,7 @@ import android.util.Log
  *
  * Android deaktiviert eine Bedienungshilfe, wenn die App "beendet erzwungen" wird.
  * Mit der per adb erteilten Berechtigung WRITE_SECURE_SETTINGS kann die App ihren
- * Dienst wieder in die Liste eintragen (wie Key Mapper / Button Mapper):
+ * Dienst wieder in die Liste eintragen:
  *
  *   adb shell pm grant org.lotzapp.home_control android.permission.WRITE_SECURE_SETTINGS
  */

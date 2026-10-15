@@ -1,6 +1,8 @@
 <p align="center">
-  <img src="android/app/src/main/res/drawable-xhdpi/banner.png" alt="Home Control" width="480">
+  <img src="docs/logo.png" alt="Home Control" width="180">
 </p>
+
+<h1 align="center">Home Control</h1>
 
 <p align="center">
   <b>Home-Assistant-Schnellzugriff für Android TV</b><br>
@@ -10,9 +12,9 @@
 Taste auf der Fernbedienung drücken: Über dem laufenden Bild (Film, Spotify, Radio …) erscheint ein Panel mit deinen
 Home-Assistant-Geräten. Mit den Pfeiltasten auswählen, mit OK schalten, mit Zurück schließen. Das Video läuft dabei weiter.
 
-Home Control ist als Ersatz für **QuickBars** entstanden, bei dem sich auf neueren Xiaomi-Boxen keine Tasten mehr anlernen
-ließen. Dazu kommt eine **Türglocke**: Klingelt es, meldet Home Assistant das an die TV-Box. Dort ertönt ein Gong, die Musik
-wird dabei nur kurz leiser, und die Meldung bleibt 30 Sekunden über allem stehen.
+Dazu kommt eine **Türglocke**: Klingelt es, meldet Home Assistant das an die TV-Box. Dort ertönt ein Gong, die Musik
+wird dabei nur kurz leiser, und die Meldung bleibt 30 Sekunden über allem stehen. Ideal, wenn die TV-Box das zentrale
+Mediengerät ist und man das Läuten sonst nicht hört.
 
 | Panel | Türglocke | Einstellungen |
 | --- | --- | --- |
@@ -39,7 +41,7 @@ schaltet die Pumpe. Wer vorher loslässt, sieht *„Abgebrochen“*. Wählbar si
 
 ### Türglocke
 
-Home Control meldet sich wie die Companion-App als Gerät in Home Assistant an. HA bekommt dadurch einen eigenen
+Home Control meldet sich über die Integration `mobile_app` als Gerät in Home Assistant an. HA bekommt dadurch einen eigenen
 Benachrichtigungsdienst. Ruft eine Automation ihn auf, passiert Folgendes:
 
 - Die Meldung erscheint über allem, was gerade läuft: Glocke, Titel, Text, Uhrzeit und optional ein **Kamerabild**.
@@ -201,7 +203,7 @@ Das Deploy-Skript erteilt bei jeder Installation die Autostart-Berechtigung. Rel
 flutter build apk --release --no-tree-shake-icons --split-per-abi
 ```
 
-- `scripts/gen_icons.ps1` erzeugt App-Icon und TV-Banner.
+- `scripts/gen_icons.ps1` erzeugt App-Icons, TV-Banner und das Logo in der App aus [`docs/logo.png`](docs/logo.png).
 - `scripts/gen_chime.ps1` erzeugt den Gong (synthetisch).
 - In `android/gradle.properties` steht `kotlin.incremental=false`. Das ist nötig, wenn Projekt und Pub-Cache auf verschiedenen Laufwerken liegen.
 
