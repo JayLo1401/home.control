@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,8 +19,8 @@ class Mdi {
     if (_byName.isNotEmpty) return;
     final text = await rootBundle.loadString('assets/mdi/names.txt');
     _byName = {
-      for (final line in text.split('\n'))
-        if (line.split(' ') case [final name, final hex])
+      for (final line in const LineSplitter().convert(text)) // auch CRLF (git autocrlf)
+        if (line.trim().split(' ') case [final name, final hex])
           // Dynamische Symbole -> Release-Build braucht --no-tree-shake-icons (siehe deploy.ps1).
           // ignore: non_const_argument_for_const_parameter
           name: IconData(int.parse(hex, radix: 16), fontFamily: fontFamily),
