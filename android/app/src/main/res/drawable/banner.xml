@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 320x180 TV-Banner -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#FF1C2733" android:pathData="M0,0h320v180h-320z" />
+    <!-- Haus -->
+    <path android:fillColor="#FF41BDF5"
+        android:pathData="M160,38 L220,90 L204,90 L204,142 L116,142 L116,90 L100,90 Z" />
+    <path android:fillColor="#FF1C2733" android:pathData="M148,104h24v38h-24z" />
+</vector>

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_description">Faengt die gewaehlte Fernbedienungstaste ab und blendet das Home-Assistant-Panel ueber dem aktuellen Bild ein. Es werden keine Bildschirminhalte gelesen.</string>
+</resources>
