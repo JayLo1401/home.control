@@ -44,7 +44,7 @@ Future<MobileAppRegistration> registerMobileApp({
       ..contentType = ContentType.json;
     req.write(jsonEncode({
       'device_id': deviceId,
-      'app_id': 'org.lotzapp.home_control',
+      'app_id': 'at.jaycloud.home.control',
       'app_name': 'Home Control',
       'app_version': device['appVersion'] ?? '0',
       'device_name': deviceName,

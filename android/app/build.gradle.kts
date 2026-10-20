@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.lotzapp.home_control"
+    namespace = "at.jaycloud.home.control"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "org.lotzapp.home_control"
+        applicationId = "at.jaycloud.home.control"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

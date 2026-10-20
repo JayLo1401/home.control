@@ -1,4 +1,4 @@
-package org.lotzapp.home_control
+package at.jaycloud.home.control
 
 import android.content.BroadcastReceiver
 import android.content.Context

@@ -1,4 +1,4 @@
-package org.lotzapp.home_control
+package at.jaycloud.home.control
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.PixelFormat

@@ -7,6 +7,13 @@
     <!-- Nur per adb erteilbar: erlaubt, den Dienst nach "Beenden erzwingen" selbst wieder einzuschalten -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
+    <!-- Sicherungen in Download/HomeControl (siehe BackupPlugin.kt): alte Speicher-Berechtigungen
+         fuer Android 9/10 und "Zugriff auf alle Dateien", damit eine neu installierte App ab
+         Android 11 die Sicherungen der vorherigen Installation lesen kann (nur auf Wunsch). -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <!-- Laeuft auf Android TV und auf Tablets -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -17,6 +24,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/banner"
+        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"

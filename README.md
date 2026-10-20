@@ -78,14 +78,14 @@ Die Nachrichten kommen **lokal** über die bestehende Verbindung zu Home Assista
    Fehlt der Eintrag, geht es auch per adb:
 
    ```sh
-   adb shell settings put secure enabled_accessibility_services org.lotzapp.home_control/.PanelAccessibilityService
+   adb shell settings put secure enabled_accessibility_services at.jaycloud.home.control/.PanelAccessibilityService
    adb shell settings put secure accessibility_enabled 1
    ```
 
 3. **Autostart absichern** (empfohlen, einmalig):
 
    ```sh
-   adb shell pm grant org.lotzapp.home_control android.permission.WRITE_SECURE_SETTINGS
+   adb shell pm grant at.jaycloud.home.control android.permission.WRITE_SECURE_SETTINGS
    ```
 
    Das Deploy-Skript erledigt das automatisch.
@@ -210,7 +210,7 @@ flutter build apk --release --no-tree-shake-icons --split-per-abi
 ### Projektstruktur
 
 ```text
-android/app/src/main/kotlin/org/lotzapp/home_control/
+android/app/src/main/kotlin/at/jaycloud/home/control/
   PanelAccessibilityService.kt  Tastenfilter, Overlay-Fenster, kurz/lang
   MainActivity.kt               Kanal zur App (Tasten anlernen, mDNS-Suche, …)
   Chime.kt                      Gong mit Audio-Ducking

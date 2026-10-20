@@ -51,7 +51,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $variant = if ($Release) { 'release' } else { 'debug' }
-$package = 'org.lotzapp.home_control'
+$package = 'at.jaycloud.home.control'
 $serviceComponent = "$package/.PanelAccessibilityService"
 
 function Find-Adb {

@@ -1,4 +1,4 @@
-package org.lotzapp.home_control
+package at.jaycloud.home.control
 
 import android.Manifest
 import android.content.ComponentName
@@ -14,7 +14,7 @@ import android.util.Log
  * Mit der per adb erteilten Berechtigung WRITE_SECURE_SETTINGS kann die App ihren
  * Dienst wieder in die Liste eintragen:
  *
- *   adb shell pm grant org.lotzapp.home_control android.permission.WRITE_SECURE_SETTINGS
+ *   adb shell pm grant at.jaycloud.home.control android.permission.WRITE_SECURE_SETTINGS
  */
 object ServiceEnabler {
     private const val TAG = "HomeControl"

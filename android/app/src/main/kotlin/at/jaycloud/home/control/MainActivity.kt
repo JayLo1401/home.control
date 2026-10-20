@@ -1,4 +1,4 @@
-package org.lotzapp.home_control
+package at.jaycloud.home.control
 
 import android.content.Intent
 import android.net.nsd.NsdManager
@@ -22,6 +22,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine.plugins.add(BackupPlugin())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "home_control/native")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

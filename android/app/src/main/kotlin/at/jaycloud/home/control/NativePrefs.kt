@@ -1,4 +1,4 @@
-package org.lotzapp.home_control
+package at.jaycloud.home.control
 
 import android.content.Context
 import android.view.KeyEvent

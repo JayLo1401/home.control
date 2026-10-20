@@ -6,6 +6,7 @@ import '../core/native_bridge.dart';
 import '../core/theme.dart';
 import '../ha/ha_client.dart';
 import '../ha/ha_discovery.dart';
+import 'backup_section.dart';
 import 'doorbell_settings.dart';
 import 'panel_edit_page.dart';
 import 'web_setup_server.dart';
@@ -27,7 +28,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _autoEnable = false;
   final _urlCtrl = TextEditingController();
   final _tokenCtrl = TextEditingController();
-  late final WebSetupServer _web = WebSetupServer(onSaved: () => _load(reconnect: true));
+  late final WebSetupServer _web = WebSetupServer(onSaved: _applySaved);
   List<String> _webAddresses = [];
   late final AppLifecycleListener _lifecycle;
 
@@ -144,6 +145,17 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) setState(() {});
   }
 
+  /// Gespeicherte Konfiguration neu laden – auch im Hintergrunddienst (Tuerglocke).
+  Future<void> _applySaved() async {
+    await _load(reconnect: true);
+    await NativeBridge.reloadOverlayConfig();
+  }
+
+  Future<void> _restoreBackup(AppConfig restored) async {
+    await restored.save();
+    await _applySaved();
+  }
+
   void _snack(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
@@ -237,7 +249,11 @@ class _SettingsPageState extends State<SettingsPage> {
         body: TabBarView(children: [
           tab(ListView(padding: const EdgeInsets.all(16), children: [_panelsSection(), _layoutSection()])),
           tab(DoorbellSettings(ha: _ha, config: _config, onChanged: _save)),
-          tab(ListView(padding: const EdgeInsets.all(16), children: [_serviceSection(), _haSection()])),
+          tab(ListView(padding: const EdgeInsets.all(16), children: [
+            _serviceSection(),
+            _haSection(),
+            BackupSection(config: _config, onRestore: _restoreBackup),
+          ])),
         ]),
         bottomNavigationBar: _statusBar(),
       ),
@@ -297,7 +313,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ? 'Autostart abgesichert: Der Dienst schaltet sich nach Neustart, Update oder „Beenden erzwingen“ '
                   '(beim nächsten Öffnen der App) selbst wieder ein.'
               : 'Autostart nicht abgesichert. Einmalig am PC ausführen:\n'
-                  'adb shell pm grant org.lotzapp.home_control android.permission.WRITE_SECURE_SETTINGS',
+                  'adb shell pm grant at.jaycloud.home.control android.permission.WRITE_SECURE_SETTINGS',
         ),
         const SizedBox(height: 12),
         Align(
@@ -364,7 +380,7 @@ class _SettingsPageState extends State<SettingsPage> {
         title: const Text('Einrichtung per Browser (Handy/PC)'),
         subtitle: Text(_web.isRunning
             ? 'Im Browser öffnen:\n${_webAddresses.join('\n')}'
-            : 'Token, Panels und Gruppen bequem vom Handy eintragen'),
+            : 'Token, Panels und Gruppen bequem vom Handy eintragen, Sicherung herunterladen/wiederherstellen'),
       ),
     ]);
   }

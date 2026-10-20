@@ -51,7 +51,34 @@ class WebSetupServer {
         _html(req, _page(c, saved: true));
         return;
       }
-      _html(req, _page(await AppConfig.load()));
+      if (req.method == 'GET' && req.uri.path == '/backup') {
+        final c = await AppConfig.load();
+        final date = DateTime.now().toIso8601String().substring(0, 10);
+        req.response.headers
+          ..contentType = ContentType.json
+          ..set('Content-Disposition', 'attachment; filename="home-control-$date.json"');
+        req.response.write(c.toBackupJson());
+        await req.response.close();
+        return;
+      }
+      if (req.method == 'POST' && req.uri.path == '/restore') {
+        final AppConfig c;
+        try {
+          c = AppConfig.fromBackupJson(await utf8.decodeStream(req));
+        } on FormatException catch (e) {
+          req.response
+            ..statusCode = 400
+            ..write(e.message);
+          await req.response.close();
+          return;
+        }
+        await c.save();
+        onSaved();
+        req.response.write('OK');
+        await req.response.close();
+        return;
+      }
+      _html(req, _page(await AppConfig.load(), restored: req.uri.queryParameters.containsKey('restored')));
     } catch (e) {
       req.response
         ..statusCode = 500
@@ -68,7 +95,7 @@ class WebSetupServer {
 
   static String _esc(String s) => const HtmlEscape().convert(s);
 
-  String _page(AppConfig c, {bool saved = false}) => '''
+  String _page(AppConfig c, {bool saved = false, bool restored = false}) => '''
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -83,10 +110,15 @@ class WebSetupServer {
   code{color:#FFB300}
   button{margin-top:20px;width:100%;padding:14px;border:0;border-radius:12px;background:#2F9E5C;color:#fff;font-size:1.1em}
   .ok{background:#1B6B3E;padding:10px;border-radius:10px}
+  .err{background:#7A1F1F;padding:10px;border-radius:10px}
+  h2{color:#2F9E5C;margin-top:32px;font-size:1.2em;border-top:1px solid #333;padding-top:20px}
+  a.btn{display:block;text-align:center;text-decoration:none;margin-top:12px;padding:14px;border-radius:12px;background:#1E2630;border:1px solid #2F9E5C;color:#eee}
+  input[type=file]{color:#eee}
   small{color:#888}
 </style></head><body><main>
 <h1>🏠 Home Control</h1>
 ${saved ? '<p class="ok">Gespeichert ✔ – die TV-App übernimmt die Werte sofort.</p>' : ''}
+${restored ? '<p class="ok">Sicherung wiederhergestellt ✔</p>' : ''}
 <form method="post" action="/save">
   <label>Home Assistant URL</label>
   <input type="text" name="url" value="${_esc(c.haUrl)}" placeholder="http://192.168.1.10:8123">
@@ -104,6 +136,26 @@ ${saved ? '<p class="ok">Gespeichert ✔ – die TV-App übernimmt die Werte sof
   </small>
   <button type="submit">Speichern</button>
 </form>
+<h2>Sicherung</h2>
+<small>Komplette Konfiguration inkl. Token, Tasten und Türglocken-Anmeldung. Die Datei enthält den Token – sicher aufbewahren.</small>
+<a class="btn" href="/backup">Sicherung herunterladen</a>
+<label>Sicherung wiederherstellen <small>(überschreibt die aktuelle Konfiguration)</small></label>
+<input type="file" id="restore" accept=".json,application/json">
+<p id="restoreMsg"></p>
+<script>
+document.getElementById('restore').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if (!file || !confirm('Konfiguration aus "' + file.name + '" wiederherstellen?')) return;
+  const msg = document.getElementById('restoreMsg');
+  const res = await fetch('/restore', {method: 'POST', body: await file.text()});
+  if (res.ok) {
+    location.href = '/?restored=1';
+  } else {
+    msg.className = 'err';
+    msg.textContent = 'Fehler: ' + await res.text();
+  }
+});
+</script>
 </main></body></html>
 ''';
 }

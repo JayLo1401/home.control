@@ -279,6 +279,58 @@ class AppConfig {
     await p.setInt('auto_close', autoCloseSeconds);
   }
 
+  // ------------------------------------------------------------ Sicherung (JSON)
+  //
+  // Komplette Konfiguration inkl. Token und Tuerglocken-Anmeldung, z. B. um sie
+  // nach einer Neuinstallation (anderer Paketname) wiederherzustellen.
+
+  static const backupFormat = 1;
+
+  String toBackupJson() => const JsonEncoder.withIndent('  ').convert({
+        'app': 'home_control',
+        'format': backupFormat,
+        'created': DateTime.now().toIso8601String(),
+        'config': {
+          'haUrl': haUrl,
+          'token': token,
+          'allowBadCertificates': allowBadCertificates,
+          'panels': [for (final x in panels) x.toJson()],
+          'overrides': {for (final e in overrides.entries) e.key: e.value.toJson()},
+          'doorbell': doorbell.toJson(),
+          'columns': columns,
+          'panelPercent': panelPercent,
+          'autoCloseSeconds': autoCloseSeconds,
+        },
+      });
+
+  /// Wirft [FormatException], wenn [json] keine Home-Control-Sicherung ist.
+  static AppConfig fromBackupJson(String json) {
+    final root = jsonDecode(json);
+    if (root is! Map || root['app'] != 'home_control' || root['config'] is! Map) {
+      throw const FormatException('Keine Home-Control-Sicherung');
+    }
+    if ((root['format'] as int? ?? 0) > backupFormat) {
+      throw const FormatException('Sicherung stammt aus einer neueren App-Version');
+    }
+    final j = (root['config'] as Map).cast<String, dynamic>();
+    return AppConfig(
+      haUrl: j['haUrl'] as String? ?? '',
+      token: j['token'] as String? ?? '',
+      allowBadCertificates: j['allowBadCertificates'] as bool? ?? false,
+      panels: [
+        for (final p in (j['panels'] as List? ?? const [])) PanelConfig.fromJson((p as Map).cast<String, dynamic>()),
+      ],
+      overrides: {
+        for (final MapEntry(:key, :value) in (j['overrides'] as Map? ?? const {}).entries)
+          key as String: EntityOverride.fromJson((value as Map).cast<String, dynamic>()),
+      },
+      doorbell: j['doorbell'] == null ? null : DoorbellConfig.fromJson((j['doorbell'] as Map).cast<String, dynamic>()),
+      columns: j['columns'] as int? ?? 4,
+      panelPercent: j['panelPercent'] as int? ?? 80,
+      autoCloseSeconds: j['autoCloseSeconds'] as int? ?? 30,
+    );
+  }
+
   // ------------------------------------------------------------ Textformat (Browser)
   //
   //   == Wohnzimmer

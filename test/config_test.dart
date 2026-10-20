@@ -22,6 +22,35 @@ scene.kino
 light.huette
 ''';
 
+  test('Sicherung: JSON enthaelt die komplette Konfiguration', () {
+    final c = AppConfig(haUrl: 'http://ha:8123', token: 'abc', allowBadCertificates: true, columns: 5)
+      ..panelsFromText(text)
+      ..setOverride('light.wohnzimmer', name: 'Decke', icon: 'mdi:ceiling-light')
+      ..doorbell.webhookId = 'hook'
+      ..doorbell.volumePercent = 60;
+    c.panels.first
+      ..keyCode = 183
+      ..keyName = 'PROG_RED'
+      ..longPress = LongPressAction('switch.whirlpool_pumpe', mode: 'on', holdMs: 1500);
+
+    final r = AppConfig.fromBackupJson(c.toBackupJson());
+    expect(r.haUrl, 'http://ha:8123');
+    expect(r.token, 'abc');
+    expect(r.allowBadCertificates, isTrue);
+    expect(r.columns, 5);
+    expect(r.panelsToText(), c.panelsToText());
+    expect(r.panels.first.keyCode, 183);
+    expect(r.panels.first.longPress?.mode, 'on');
+    expect(r.overrides['light.wohnzimmer']?.icon, 'mdi:ceiling-light');
+    expect(r.doorbell.webhookId, 'hook');
+    expect(r.doorbell.volumePercent, 60);
+  });
+
+  test('Sicherung: fremde Dateien werden abgelehnt', () {
+    expect(() => AppConfig.fromBackupJson('{"foo": 1}'), throwsFormatException);
+    expect(() => AppConfig.fromBackupJson('{"app":"home_control","format":99,"config":{}}'), throwsFormatException);
+  });
+
   test('Textformat: Panels, Gruppen und Entitaeten', () {
     final c = AppConfig()..panelsFromText(text);
     expect(c.panels.map((p) => p.name), ['Wohnzimmer', 'Garten']);
