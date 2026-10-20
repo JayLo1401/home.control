@@ -10,8 +10,8 @@
     auf jedem gewaehlten Geraet.
 
 .PARAMETER Release
-    Release-APK statt Debug bauen/installieren. Signiert mit dem Debug-Key
-    (siehe android/app/build.gradle.kts), fuer Tests reicht das.
+    Release-APK statt Debug bauen/installieren. Signiert mit dem gemeinsamen
+    jaycloud-Schluessel aus D:\github_private\keystore (siehe android/app/build.gradle.kts).
 
 .PARAMETER SkipBuild
     Zuletzt gebaute APK installieren, ohne neu zu bauen.
