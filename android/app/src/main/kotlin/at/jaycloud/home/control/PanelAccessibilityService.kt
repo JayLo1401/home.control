@@ -79,6 +79,8 @@ class PanelAccessibilityService : AccessibilityService() {
         if (engine != null) return
         // Engine wird vorgewaermt, damit das Panel beim Tastendruck sofort erscheint.
         val e = FlutterEngine(this)
+        // Automatische Updates laufen im Dienst (er ist praktisch immer aktiv).
+        e.plugins.add(UpdatePlugin())
         e.dartExecutor.executeDartEntrypoint(
             DartExecutor.DartEntrypoint(
                 FlutterInjector.instance().flutterLoader().findAppBundlePath(),

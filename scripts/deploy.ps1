@@ -187,6 +187,14 @@ foreach ($d in $chosen) {
         Write-Host "  Autostart-Berechtigung konnte nicht erteilt werden" -ForegroundColor Yellow
     }
 
+    # Selbst-Update aus dem Nexus: viele TV-Boxen haben keine Seite "Unbekannte Apps installieren".
+    & $adb -s $d.Serial shell appops set $package REQUEST_INSTALL_PACKAGES allow
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  Update-Berechtigung erteilt" -ForegroundColor Green
+    } else {
+        Write-Host "  Update-Berechtigung konnte nicht erteilt werden" -ForegroundColor Yellow
+    }
+
     if ($EnableService) {
         Enable-PanelService $d.Serial
         Write-Host "  Hintergrunddienst eingeschaltet" -ForegroundColor Green

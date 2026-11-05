@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(BackupPlugin())
+        flutterEngine.plugins.add(UpdatePlugin())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "home_control/native")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

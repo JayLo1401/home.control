@@ -9,6 +9,7 @@ import '../ha/ha_discovery.dart';
 import 'backup_section.dart';
 import 'doorbell_settings.dart';
 import 'panel_edit_page.dart';
+import 'update_section.dart';
 import 'web_setup_server.dart';
 import 'widgets.dart';
 
@@ -253,6 +254,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _serviceSection(),
             _haSection(),
             BackupSection(config: _config, onRestore: _restoreBackup),
+            const UpdateSection(),
           ])),
         ]),
         bottomNavigationBar: _statusBar(),

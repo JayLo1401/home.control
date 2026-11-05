@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../core/config.dart';
 import '../core/theme.dart';
+import '../core/update_service.dart';
 import '../ha/ha_client.dart';
 import '../ha/mobile_app.dart';
 import 'doorbell_popup.dart';
@@ -43,6 +44,28 @@ class _OverlayAppState extends State<OverlayApp> {
     _channel.setMethodCallHandler(_onCall);
     _pushSub = _ha.notifications.listen((ev) => _ring(DoorbellMessage.fromPush(ev)));
     _reloadConfig();
+    if (UpdateService.supported) _updateTimer = Timer(const Duration(minutes: 2), _autoUpdate);
+  }
+
+  Timer? _updateTimer;
+
+  /// Automatisches Update: kurz nach dem Start des Dienstes, dann alle 6
+  /// Stunden - nie, waehrend ein Panel oder die Tuerglocke offen ist.
+  Future<void> _autoUpdate() async {
+    if (_mode != _Mode.none) {
+      _updateTimer = Timer(const Duration(minutes: 10), _autoUpdate);
+      return;
+    }
+    _updateTimer = Timer(const Duration(hours: 6), _autoUpdate);
+    try {
+      if (!await UpdateService.autoUpdate() || !await UpdateService.canInstall()) return;
+      final update = await UpdateService.check();
+      if (update == null || _mode != _Mode.none) return;
+      debugPrint('Auto-Update auf ${update.version}');
+      await UpdateService.install(update);
+    } catch (e) {
+      debugPrint('Auto-Update fehlgeschlagen: $e');
+    }
   }
 
   Future<AppConfig> _reloadConfig() async {
@@ -116,6 +139,7 @@ class _OverlayAppState extends State<OverlayApp> {
   @override
   void dispose() {
     _pushSub?.cancel();
+    _updateTimer?.cancel();
     _ha.dispose();
     super.dispose();
   }
