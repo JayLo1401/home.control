@@ -2,11 +2,11 @@
   <img src="docs/logo.png" alt="Home Control" width="180">
 </p>
 
-<h1 align="center">Home Control</h1>
+<h1 align="center">JayCloud Home Control</h1>
 
 <p align="center">
   <b>Home-Assistant-Schnellzugriff für Android TV</b><br>
-  <a href="https://jaycloud.at/homecontrol">Powered by Jay</a> · Erklärseite: <a href="https://jaycloud.at/homecontrol">jaycloud.at/homecontrol</a>
+  <a href="https://jaycloud.at/homecontrol">Powered by jaycloud.at</a> · Erklärseite: <a href="https://jaycloud.at/homecontrol">jaycloud.at/homecontrol</a>
 </p>
 
 Taste auf der Fernbedienung drücken: Über dem laufenden Bild (Film, Spotify, Radio …) erscheint ein Panel mit deinen

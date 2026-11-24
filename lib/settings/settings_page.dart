@@ -234,7 +234,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 onTap: () async {
                   if (!await NativeBridge.openUrl(_homepage)) _snack('Kein Browser gefunden: $_homepage');
                 },
-                child: const Text('Powered by Jay',
+                child: const Text('Powered by jaycloud.at',
                     style: TextStyle(color: brandGreen, fontWeight: FontWeight.w600, fontSize: 12, height: 1.3)),
               ),
             ]),

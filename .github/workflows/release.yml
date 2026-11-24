@@ -153,4 +153,4 @@ jobs:
           } > "$RUNNER_TEMP/notes.md"
           git tag "$TAG" "$GITHUB_SHA"
           git push origin "$TAG"
-          gh release create "$TAG" --title "Home Control $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest
+          gh release create "$TAG" --title "JayCloud Home Control $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest
